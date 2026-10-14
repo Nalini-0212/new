@@ -1,0 +1,14 @@
+Requests and Limits control resource
+allocation.
+ 
+Node Affinity controls which nodes
+a pod prefers or requires.
+ 
+Taints repel pods from nodes,
+while Tolerations allow exceptions.
+ 
+Pod Affinity places related pods
+together.
+ 
+Pod Anti-Affinity spreads replicas
+across nodes for high availability.
