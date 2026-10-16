@@ -1,0 +1,565 @@
+1. What is Cilium?
+Interview Question
+
+What is Cilium and why do companies use it?
+
+Answer
+
+Cilium is a Kubernetes networking, security, and observability platform built on eBPF.
+
+Traditional Kubernetes networking relies on:
+
+iptables
+kube-proxy
+Linux networking rules
+
+Cilium replaces much of this with eBPF programs running inside the Linux kernel.
+
+Benefits:
+
+Faster packet processing
+Better scalability
+Network policies
+Observability
+Load balancing
+Service mesh without sidecars
+2. What is eBPF?
+Very Common
+Answer
+
+eBPF (Extended Berkeley Packet Filter) allows programs to run safely inside the Linux kernel.
+
+Instead of packets traveling through many networking layers:
+
+Plain Text
+Packet
+|
+iptables
+|
+kube-proxy
+|
+routing
+|
+pod
+
+Cilium attaches eBPF programs directly in the kernel.
+
+Plain Text
+Packet
+|
+eBPF
+|
+Pod
+
+Result:
+
+lower latency
+fewer context switches
+better performance
+3. Explain Cilium Architecture
+Expected Diagram
+Plain Text
++------------------+
+| Kubernetes API |
++--------+---------+
+|
+Cilium Agent
+|
+eBPF Maps
+|
+Linux Kernel
+|
+Pods
+
+Components:
+
+Cilium Agent
+
+Runs on every node.
+
+Responsibilities:
+
+programs eBPF
+manages policies
+manages services
+Operator
+
+Cluster-wide controller.
+
+Responsibilities:
+
+IPAM
+node management
+synchronization
+4. Packet Flow (Most Important)
+Question
+
+Explain Pod A reaching Pod B.
+
+Whiteboard
+Plain Text
+Pod A
+|
+veth
+|
+eBPF Program
+|
+Routing Lookup
+|
+eBPF Load Balancer
+|
+Pod B
+Flow
+Pod A sends packet
+Kernel intercepts packet
+eBPF checks destination
+Service lookup occurs
+Backend selected
+Packet routed to Pod B
+
+This is probably the most asked Cilium question.
+
+5. Cilium vs kube-proxy
+Question
+
+Why disable kube-proxy?
+
+Traditional
+Plain Text
+Service
+|
+iptables
+|
+Backend Pod
+
+Problems:
+
+large rule sets
+slower lookups
+Cilium
+Plain Text
+Service
+|
+eBPF Hash Map
+|
+Pod
+
+Benefits:
+
+O(1) lookup
+better scaling
+lower latency
+6. What is kube-proxy Replacement?
+Answer
+
+Cilium can fully replace kube-proxy.
+
+Instead of:
+
+Plain Text
+Service
+|
+iptables
+|
+endpoint
+
+Cilium uses:
+
+Plain Text
+Service
+|
+eBPF service map
+|
+endpoint
+
+No iptables service rules needed.
+
+7. Cilium Network Policies
+Very Common
+
+Question:
+
+How is Cilium policy different from Kubernetes NetworkPolicy?
+
+Kubernetes NetworkPolicy
+
+Supports:
+
+Plain Text
+L3/L4
+IP
+Port
+Cilium Policy
+
+Supports:
+
+Plain Text
+L3
+L4
+L7
+
+Example:
+
+Plain Text
+Allow:
+GET /api/*
+Deny:
+POST /admin
+
+Can filter:
+
+HTTP
+Kafka
+DNS
+8. CiliumNetworkPolicy vs NetworkPolicy
+Question
+
+When use CiliumNetworkPolicy?
+
+Answer
+
+When application-aware policy is required.
+
+Example:
+
+YAML
+Allow:
+GET /products
+ 
+Deny:
+DELETE /products
+
+Standard Kubernetes policy cannot do this.
+
+9. What is Hubble?
+Very Common
+Answer
+
+Hubble is the observability component of Cilium.
+
+Provides:
+
+flow visibility
+DNS visibility
+service map
+network monitoring
+
+Example:
+
+Plain Text
+Frontend
+|
+Backend
+|
+Database
+
+See every request in real time.
+
+Commands:
+
+Shell
+hubble status
+ 
+hubble observe
+ 
+hubble observe --pod frontend
+10. Explain Service Load Balancing
+Question
+
+How does Service routing work?
+
+Example:
+
+Plain Text
+Service
+|
++--> Pod1
+|
++--> Pod2
+|
++--> Pod3
+
+Cilium:
+
+Plain Text
+eBPF Service Map
+
+stores service VIP and backends.
+
+Load balancing occurs inside the kernel.
+
+11. NodePort in Cilium
+Question
+
+How incoming traffic reaches pods?
+
+Plain Text
+Client
+|
+NodePort
+|
+eBPF
+|
+Backend Pod
+
+No iptables traversal required.
+
+12. Ingress Support
+
+Question:
+
+Can Cilium replace NGINX Ingress?
+
+Answer:
+
+Yes.
+
+Cilium provides:
+
+Plain Text
+Cilium Ingress
+
+Features:
+
+L7 routing
+TLS
+load balancing
+13. IPAM (Frequently Asked)
+Question
+
+How Cilium assigns Pod IPs?
+
+Models:
+
+Kubernetes IPAM
+Plain Text
+K8s manages IPs
+ClusterPool IPAM
+Plain Text
+Large CIDR
+|
+Node gets subnet
+|
+Pods get IPs
+AWS ENI IPAM
+Plain Text
+AWS ENI
+|
+Secondary IPs
+|
+Pods
+
+In EKS this is very common.
+
+14. Identity Based Security
+
+Unique Cilium feature.
+
+Instead of:
+
+Plain Text
+10.1.1.2
+
+Policies use identities:
+
+Plain Text
+app=frontend
+
+Example:
+
+Plain Text
+frontend
+|
+allowed
+|
+backend
+
+IP changes don't break policy.
+
+15. Encryption
+Question
+
+Does Cilium support encryption?
+
+Answer
+
+Yes.
+
+Options:
+
+Plain Text
+IPSec
+WireGuard
+
+Flow:
+
+Plain Text
+Node A
+|
+Encrypted Traffic
+|
+Node B
+16. Egress Gateway
+Senior Level
+Problem
+
+Pods go internet with random node IP.
+
+Solution
+Plain Text
+Pods
+|
+Egress Gateway
+|
+Internet
+
+Fixed outgoing IP.
+
+Used for:
+
+Firewall whitelisting
+Compliance
+17. Multi-Cluster Connectivity
+Question
+
+What is ClusterMesh?
+
+Answer
+
+ClusterMesh connects multiple Kubernetes clusters.
+
+Plain Text
+Cluster A
+|
+ClusterMesh
+|
+Cluster B
+
+Benefits:
+
+cross-cluster services
+cross-cluster communication
+shared identities
+18. Service Mesh with Cilium
+Senior Favorite
+
+Question:
+
+How does Cilium Service Mesh differ from Istio?
+
+Istio
+Plain Text
+App
+|
+Envoy Sidecar
+|
+Network
+
+Every pod gets Envoy.
+
+Cilium
+Plain Text
+eBPF
+|
+Kernel
+|
+App
+
+Benefits:
+
+lower CPU
+less memory
+fewer sidecars
+19. Troubleshooting Questions
+Verify Cilium
+Shell
+cilium status
+View Endpoints
+Shell
+cilium endpoint list
+View Services
+Shell
+cilium service list
+BPF Maps
+Shell
+cilium bpf lb list
+Flow Visibility
+Shell
+hubble observe
+20. Senior-Level Scenario Questions
+Scenario 1
+
+Pod cannot reach another pod.
+
+How troubleshoot?
+
+Plain Text
+1. Check pod status
+2. Check service
+3. Check endpoints
+4. Check policy
+5. Check Hubble flow
+6. Check cilium status
+7. Check node routing
+Scenario 2
+
+Service slow after scaling to 1000 pods.
+
+Expected Answer:
+
+Plain Text
+iptables issue
+Switch to eBPF load balancing
+Check kube-proxy replacement
+Inspect BPF maps
+Scenario 3
+
+Traffic blocked unexpectedly.
+
+Expected Investigation:
+
+Plain Text
+CiliumNetworkPolicy
+Identity
+DNS policy
+L7 policy
+Hubble observe
+Top 10 Questions to Memorize
+What is eBPF?
+How does packet flow work in Cilium?
+Difference between Cilium and Calico?
+Difference between Cilium and kube-proxy?
+What is kube-proxy replacement?
+What is Hubble?
+How does Cilium IPAM work?
+What is ClusterMesh?
+How does Cilium service mesh work?
+How do you troubleshoot pod-to-pod communication failures?
+Interview Tip
+
+For mid-to-senior roles, the interviewer usually keeps drilling into these three areas:
+
+Plain Text
+eBPF Internals
+Packet Flow
+Network Policies
+
+If you can draw and explain:
+
+Plain Text
+Client
+|
+Service
+|
+eBPF Load Balancer
+|
+Backend Pod
+
+and
+
+Plain Text
+Pod A
+|
+eBPF
+|
+Pod B
