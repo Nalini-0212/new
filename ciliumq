@@ -1155,3 +1155,11 @@ What is the most important thing to explain?
 Plain Text
 Packet Flow:
 Client → eBPF → Service Lookup → Policy Check → Backend Pod
+
+When Pod A wants to communicate with Pod B, the packet leaves Pod A and reaches the pod's veth interface. Cilium has attached eBPF programs to these interfaces. The eBPF program runs safely inside the Linux kernel and processes the packet without requiring iptables traversal.
+
+First, Cilium performs network policy enforcement to determine whether the communication is allowed. If the traffic is destined for a Kubernetes Service, Cilium performs service load balancing using eBPF maps that contain Service IPs and backend endpoints. These eBPF maps are continuously updated by the cilium-agent running on every node, which watches Kubernetes resources such as Pods, Services, Endpoints, Nodes, and Network Policies.
+
+After policy validation and endpoint selection, the packet is forwarded toward the destination. Depending on the cluster configuration, Cilium uses either native routing or tunnel encapsulation such as VXLAN/Geneve. When the packet reaches the destination node, another eBPF program processes it, applies any ingress policy checks, and finally delivers it to Pod B.
+
+Because packet processing, policy enforcement, and load balancing happen directly in the Linux kernel through eBPF, Cilium reduces latency, improves performance, scales better, and can completely replace kube-proxy.
