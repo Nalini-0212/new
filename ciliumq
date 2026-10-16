@@ -768,4 +768,390 @@ Routing
    |
 Pod
    |
-Hubbl
+Hubble
+
+1. eBPF Internals
+
+Most asked question:
+
+What is eBPF and why does Cilium use it instead of iptables?
+
+Traditional Kubernetes
+Plain Text
+Pod A
+↓
+veth
+↓
+iptables
+↓
+kube-proxy
+↓
+Service
+↓
+Pod B
+
+Problems:
+
+Plain Text
+Thousands of iptables rules
+Linear lookups
+More latency
+Hard to scale
+Cilium Approach
+Plain Text
+Pod A
+↓
+eBPF Program
+↓
+eBPF Maps
+↓
+Pod B
+
+No iptables required.
+
+What is eBPF?
+
+eBPF = Extended Berkeley Packet Filter
+
+Think of it as:
+
+Plain Text
+Small programs
+running safely
+inside Linux kernel
+
+Instead of sending every packet to:
+
+Plain Text
+iptables
+userspace
+kernel
+
+eBPF processes packets directly in kernel.
+
+Components
+eBPF Program
+
+The logic.
+
+Example:
+
+Plain Text
+Packet arrives
+Check destination
+Apply policy
+Forward packet
+eBPF Map
+
+The memory/database.
+
+Example:
+
+Plain Text
+Service IP -> Backend Pod
+ 
+10.96.0.10
+|
++--> Pod1
++--> Pod2
+
+Stored in eBPF map.
+
+Hook Points
+
+Interview favorite.
+
+eBPF can attach to:
+
+Plain Text
+XDP
+TC
+Socket
+Cgroup
+Tracepoint
+
+Cilium commonly uses:
+
+Plain Text
+TC (Traffic Control)
+ 
+and
+ 
+XDP (Fast path)
+Senior Question
+Why faster than iptables?
+
+iptables:
+
+Plain Text
+Rule1
+Rule2
+Rule3
+...
+Rule10000
+
+Packet checks many rules.
+
+eBPF:
+
+Plain Text
+Hash lookup
+
+Almost O(1).
+
+2. Packet Flow
+
+This is the most important topic.
+
+Question:
+
+Explain packet flow from Client to Pod.
+
+Service Flow
+Plain Text
+Client
+|
+v
+Service IP
+10.96.0.100
+|
+v
+eBPF Map
+|
++--> Pod1
++--> Pod2
+Detailed Flow
+Plain Text
+Client
+|
+v
+Node NIC
+|
+v
+eBPF Program
+|
+v
+Service Lookup
+|
+v
+Backend Selection
+|
+v
+Pod
+
+No kube-proxy.
+
+Pod-to-Pod Flow
+Plain Text
+Pod A
+|
+v
+veth Pair
+|
+v
+eBPF
+|
+v
+Routing Decision
+|
+v
+Pod B
+Cross Node
+Plain Text
+Pod A
+Node1
+|
+v
+eBPF
+|
+v
+Encap Route
+|
+v
+Node2
+|
+v
+eBPF
+|
+v
+Pod B
+Whiteboard Answer
+Plain Text
+Pod A
+|
+v
+eBPF Hook
+|
+Service Lookup
+|
+Backend Selection
+|
+Policy Check
+|
+Forward Packet
+|
+Pod B
+
+That answer alone covers numerous interview questions.
+
+3. Network Policies
+
+Most commonly asked Cilium topic.
+
+Kubernetes Policy
+
+Default:
+
+Plain Text
+Everything allowed
+
+Unless policy exists.
+
+Example
+
+Allow frontend → backend.
+
+YAML
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+name: allow-frontend
+spec:
+podSelector:
+matchLabels:
+app: backend
+ 
+ingress:
+- from:
+- podSelector:
+matchLabels:
+app: frontend
+
+Flow:
+
+Plain Text
+Frontend Pod
+|
+v
+Backend Pod
+✅ Allowed
+ 
+Other Pod
+|
+v
+Backend Pod
+❌ Blocked
+How Cilium Enforces
+
+Not iptables.
+
+Instead:
+
+Plain Text
+Packet arrives
+|
+v
+eBPF Program
+|
+v
+Policy Check
+|
++---+---+
+| |
+Allow Deny
+CiliumNetworkPolicy
+
+Senior-level topic.
+
+Example:
+
+YAML
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+name: backend-policy
+spec:
+endpointSelector:
+matchLabels:
+app: backend
+ 
+ingress:
+- fromEndpoints:
+- matchLabels:
+app: frontend
+
+Benefits:
+
+Plain Text
+L3 IP
+L4 Port
+L7 HTTP
+DNS Policies
+L7 HTTP Policy
+
+Very common interview question.
+
+YAML
+rules:
+http:
+- method: GET
+path: /api
+
+Result:
+
+Plain Text
+GET /api ✅
+POST /api ❌
+DELETE /api ❌
+
+Traditional NetworkPolicy cannot do this.
+
+Senior Whiteboard Flow
+
+Draw this:
+
+Plain Text
+Client
+|
+v
+Node NIC
+|
+v
+eBPF Hook
+|
++--> Service Lookup
+|
++--> Load Balancing
+|
++--> Network Policy Check
+|
++--> Routing
+|
+v
+Destination Pod
+
+Then explain:
+
+Plain Text
+eBPF Program = Logic
+eBPF Maps = Data
+Service Maps = Load balancing
+Policy Maps = Security
+Top Interview Questions
+What problem does eBPF solve?
+Plain Text
+Replaces iptables with kernel-level packet processing.
+ 
+How does Cilium replace kube-proxy?
+Plain Text
+Service lookup happens using eBPF maps instead of iptables NAT rules.
+Why is packet forwarding faster?
+Plain Text
+In-kernel hash lookups instead of traversing thousands of iptables rules.
+How are policies enforced?
+Plain Text
+eBPF programs attached to the pod path check policy before forwarding packets.
+What is the most important thing to explain?
+Plain Text
+Packet Flow:
+Client → eBPF → Service Lookup → Policy Check → Backend Pod
