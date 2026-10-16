@@ -73,6 +73,16 @@ Service Mesh	Yes	No
 Performance	High	Good
 Interview Answer
 
+Why is Cilium faster than Calico?
+
+Answer:
+
+Cilium performs packet processing directly in the Linux kernel using eBPF maps, avoiding the traversal of large iptables rule sets. This reduces latency, CPU overhead, and improves scalability compared to traditional iptables-based networking.
+
+30-Second Interview Answer
+
+Calico is a Kubernetes CNI that traditionally uses iptables and BGP for networking and policy enforcement, while Cilium is built on eBPF and performs networking, service load balancing, and security directly in the Linux kernel. Cilium offers better performance, kube-proxy replacement, advanced L7 security, and observability through Hubble, whereas Calico is simpler and widely adopted in many Kubernetes environments.
+
 Calico started primarily as a network policy solution.
 
 Cilium was designed around eBPF and provides:
