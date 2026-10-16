@@ -1173,3 +1173,298 @@ First, Cilium performs network policy enforcement to determine whether the commu
 After policy validation and endpoint selection, the packet is forwarded toward the destination. Depending on the cluster configuration, Cilium uses either native routing or tunnel encapsulation such as VXLAN/Geneve. When the packet reaches the destination node, another eBPF program processes it, applies any ingress policy checks, and finally delivers it to Pod B.
 
 Because packet processing, policy enforcement, and load balancing happen directly in the Linux kernel through eBPF, Cilium reduces latency, improves performance, scales better, and can completely replace kube-proxy.
+
+This is one of the most important Kubernetes networking concepts.
+
+Relationship Between kube-proxy, iptables, and eBPF
+Kubernetes Service Example
+
+Suppose:
+
+Plain Text
+Service IP = 10.96.10.100
+ 
+Backend Pods:
+Pod B = 10.244.1.10
+Pod C = 10.244.2.20
+
+Application in Pod A accesses:
+
+Plain Text
+http://web-service
+
+DNS resolves:
+
+Plain Text
+web-service
+↓
+10.96.10.100
+
+Question:
+
+Plain Text
+How does traffic reach Pod B or Pod C?
+1. kube-proxy
+What is kube-proxy?
+
+kube-proxy is a Kubernetes component that runs on every node.
+
+Its job is:
+
+Plain Text
+Monitor Services
+Monitor Endpoints
+Create forwarding rules
+
+It watches:
+
+Plain Text
+API Server
+|
++--> Services
+|
++--> Endpoints
+
+Example:
+
+Plain Text
+Service:
+10.96.10.100
+ 
+Backends:
+10.244.1.10
+10.244.2.20
+
+kube-proxy learns this information and programs the node.
+
+2. kube-proxy + iptables
+
+Traditional Kubernetes networking:
+
+Plain Text
+Pod A
+|
+v
+iptables
+|
+v
+Backend Pod
+Step by Step
+Step 1
+
+Pod A sends:
+
+Plain Text
+Destination:
+10.96.10.100
+Step 2
+
+Linux kernel receives packet.
+
+Step 3
+
+iptables rules created by kube-proxy are checked.
+
+Example:
+
+Plain Text
+10.96.10.100
+|
++--> 10.244.1.10
+|
++--> 10.244.2.20
+Step 4
+
+DNAT occurs
+
+Before:
+
+Plain Text
+Destination:
+10.96.10.100
+
+After:
+
+Plain Text
+Destination:
+10.244.1.10
+ 
+Step 5
+
+Packet reaches Pod B.
+
+Plain Text
+Pod A
+|
+v
+Pod B
+Problem with iptables
+
+Imagine:
+
+Plain Text
+5000 Services
+
+You now have:
+
+Plain Text
+Thousands of iptables rules
+
+Packet processing becomes:
+
+Plain Text
+Rule 1
+Rule 2
+Rule 3
+Rule 4
+...
+Rule 5000
+``
+
+At large scale, this becomes less efficient.
+
+3. eBPF
+
+eBPF means:
+
+Plain Text
+Extended Berkeley Packet Filter
+
+It allows tiny programs to run directly inside the Linux kernel.
+
+Think:
+
+Plain Text
+Smart code
+running inside kernel
+Cilium + eBPF Flow
+Plain Text
+Pod A
+|
+v
+eBPF Program
+|
+v
+Pod B
+Step 1
+
+Pod A sends:
+
+Plain Text
+10.96.10.100
+Step 2
+
+Packet reaches eBPF hook.
+
+Plain Text
+Pod A
+|
+v
+eBPF Hook
+Step 3
+
+Service Lookup
+
+eBPF uses a hash map:
+
+Plain Text
+10.96.10.100
+|
++--> 10.244.1.10
+|
++--> 10.244.2.20
+Step 4
+
+Backend Selection
+
+Example:
+
+Plain Text
+Selected:
+10.244.1.10
+``
+Step 5
+
+Policy Check
+
+Plain Text
+Can Pod A
+talk to Pod B?
+ 
+
+If policy allows:
+
+Plain Text
+ALLOW
+
+If policy denies:
+
+Plain Text
+DROP
+Step 6
+
+Forward packet.
+
+Plain Text
+Pod A
+|
+v
+Pod B
+Visual Comparison
+kube-proxy + iptables
+Plain Text
+Pod A
+|
+v
+Linux Kernel
+|
+v
+iptables Rules
+|
+v
+DNAT
+|
+v
+Pod B
+eBPF (Cilium)
+Plain Text
+Pod A
+|
+v
+eBPF Hook
+|
+Service Lookup
+|
+Backend Selection
+|
+Policy Check
+|
+Forward Packet
+|
+Pod B
+ 
+Interview Question
+What is kube-proxy?
+
+kube-proxy runs on every Kubernetes node and watches Services and Endpoints. It programs networking rules so traffic sent to a Service IP can be forwarded to the correct backend pods.
+
+What is iptables?
+
+iptables is a Linux packet filtering and NAT framework. kube-proxy traditionally uses iptables rules to implement Kubernetes Service load balancing through destination NAT.
+
+What is eBPF?
+
+eBPF is a Linux kernel technology that allows programs to run inside the kernel. Solutions like Cilium use eBPF to perform Service load balancing, network policy enforcement, and observability without relying on kube-proxy iptables rules.
+
+One-Line Difference
+Plain Text
+kube-proxy = Creates networking rules
+iptables = Traditional mechanism used by kube-proxy
+eBPF = Modern kernel-based alternative used by Cilium
+Easy Memory Trick
+Plain Text
+Old Kubernetes:
+Pod -> kube-proxy -> iptables -> Pod
+ 
+Modern Cilium:
+Pod -> eBPF -> Pod
