@@ -18,3 +18,540 @@ kube-proxy rules
 For Cilium interviews, remember this line:
 
 "kube-proxy manages Service load balancing using iptables/IPVS, whereas Cilium replaces kube-proxy by implementing Service load balancing directly with eBPF in the Linux kernel."
+What is a CNI?
+
+CNI (Container Network Interface) is the networking layer that gives Pods IP addresses and enables Pod-to-Pod, Pod-to-Service, and external communication in Kubernetes.
+
+Without a CNI:
+
+Plain Text
+Pod Created ✅
+Pod IP Assigned ❌
+Networking ❌
+
+Pods would remain unable to communicate.
+
+How CNI Fits in Kubernetes
+Plain Text
+Pod Creation
+↓
+Scheduler selects node
+↓
+Kubelet starts pod
+↓
+CNI Plugin invoked
+↓
+Assign Pod IP
+↓
+Configure routes
+↓
+Pod becomes reachable
+Most Popular CNIs
+1. Cilium
+
+Uses:
+
+Plain Text
+eBPF
+
+instead of traditional iptables.
+
+Features:
+
+✅ eBPF-based networking
+
+✅ Network Policies
+
+✅ Observability (Hubble)
+
+✅ kube-proxy replacement
+
+✅ High performance
+
+Packet Flow:
+
+Plain Text
+Pod A
+↓
+eBPF
+↓
+Service Lookup
+↓
+Backend Pod
+
+Very popular for mid-to-senior Kubernetes roles.
+
+2. Calico
+
+Uses:
+
+Plain Text
+BGP
+iptables
+eBPF (optional)
+
+Features:
+
+✅ Network policies
+
+✅ Routing
+
+✅ Large-scale clusters
+
+Very common in enterprise environments.
+
+3. AWS VPC CNI
+
+Default in EKS.
+
+Uses AWS networking directly.
+
+Plain Text
+ENI
+↓
+Pod IPs from VPC
+
+Example:
+
+Plain Text
+VPC: 10.0.0.0/16
+ 
+Node: 10.0.1.10
+ 
+Pod: 10.0.1.50
+Pod: 10.0.1.51
+
+Pods receive actual VPC IPs.
+
+Benefits:
+
+✅ Native AWS networking
+
+✅ No overlay network
+
+Interview question:
+
+How are Pod IPs assigned in EKS?
+
+Answer:
+
+Usually through AWS VPC CNI, which allocates pod IPs from ENIs attached to worker nodes.
+
+4. Flannel
+
+Simple overlay networking.
+
+Uses:
+
+Plain Text
+VXLAN
+ 
+
+Features:
+
+✅ Easy setup
+
+✅ Lightweight
+
+❌ No network policies
+
+Common in labs and learning environments.
+
+5. Weave Net
+
+Creates mesh networking.
+
+Features:
+
+✅ Easy installation
+
+✅ Encryption support
+
+Less common today.
+
+Overlay vs Native Networking
+Overlay Network
+
+Examples:
+
+Plain Text
+Flannel
+Calico VXLAN
+
+Packet:
+
+Plain Text
+Pod
+↓
+Encapsulation
+↓
+VXLAN Tunnel
+↓
+Destination Node
+↓
+Decapsulation
+↓
+Pod
+
+Pros:
+
+Works anywhere
+
+Cons:
+
+More overhead
+Native Network
+
+Examples:
+
+Plain Text
+AWS VPC CNI
+Azure CNI
+
+Packet:
+
+Plain Text
+Pod
+↓
+AWS Network
+↓
+Pod
+
+Pros:
+
+✅ Faster
+
+✅ No encapsulation
+
+Cons:
+
+❌ IP exhaustion possible
+
+CNI Interview Questions
+What does CNI do?
+
+A CNI plugin assigns IP addresses to Pods and configures network connectivity between Pods, Services, and external networks.
+
+Which CNI is used in EKS?
+
+AWS VPC CNI by default.
+
+Difference between Cilium and Calico?
+Feature	Cilium	CalicoData Plane	eBPF	iptables/eBPF
+kube-proxy Replacement	Yes	Limited
+Observability	Hubble	Basic
+Performance	Higher	Good
+How to Check CNI?
+Shell
+kubectl get pods -n kube-system
+
+Typical outputs:
+
+AWS VPC CNI:
+
+Plain Text
+aws-node
+
+Cilium:
+
+Plain Text
+cilium
+cilium-operator
+
+Calico:
+
+Plain Text
+calico-node
+calico-kube-controllers
+Senior-Level Interview Answer
+
+CNI is the networking framework used by Kubernetes to provide IP addresses and connectivity to Pods. When a Pod is created, Kubelet invokes the CNI plugin, which configures the network namespace, assigns an IP, and sets up routes. Common CNIs include AWS VPC CNI, Cilium, Calico, and Flannel. Modern environments increasingly adopt Cilium because it uses eBPF for routing, load balancing, security, and observability with lower overhead than iptables-based solutions.
+
+Deployment vs StatefulSet vs DaemonSet
+
+This is one of the most frequently asked Kubernetes interview questions.
+
+1. Deployment
+
+Used for stateless applications.
+
+Examples:
+
+Nginx
+React UI
+API servers
+Microservices
+Characteristics
+
+✅ Pods are identical
+
+✅ Any pod can serve any request
+
+✅ Supports rolling updates
+
+✅ Easy scaling
+
+❌ No stable identity
+
+❌ No persistent storage guarantee
+
+Example
+YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+name: nginx
+spec:
+replicas: 3
+
+Creates:
+
+Plain Text
+nginx-7fd8c5d4f-bx7kl
+nginx-7fd8c5d4f-r8tzn
+nginx-7fd8c5d4f-kqjwd
+
+If one pod dies:
+
+Plain Text
+nginx-abc123
+
+new pod:
+
+Plain Text
+nginx-xyz456
+
+New name, new identity.
+
+Real-world Example
+Plain Text
+Frontend Application
+Backend API
+Authentication Service
+
+Use:
+
+Plain Text
+Deployment
+2. StatefulSet
+
+Used for stateful applications.
+
+Examples:
+
+MySQL
+PostgreSQL
+MongoDB
+Kafka
+Elasticsearch
+Cassandra
+Why StatefulSet?
+
+Databases need:
+
+Plain Text
+Stable hostname
+Stable network identity
+Persistent storage
+Ordered startup
+Ordered shutdown
+
+Deployment cannot provide this.
+
+Example
+YAML
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+name: mysql
+
+Pods:
+
+Plain Text
+mysql-0
+mysql-1
+mysql-2
+
+If mysql-1 restarts:
+
+Plain Text
+mysql-1
+
+remains
+
+Plain Text
+mysql-1
+
+Identity never changes.
+
+Storage
+
+Each pod gets its own PVC.
+
+Plain Text
+mysql-0 -> pvc-0
+mysql-1 -> pvc-1
+mysql-2 -> pvc-2
+ 
+
+Even if pod dies:
+
+Plain Text
+Storage survives
+Ordered Startup
+Plain Text
+mysql-0
+|
+mysql-1
+|
+mysql-2
+
+Kubernetes starts them sequentially.
+
+Real Example: Kafka
+Plain Text
+broker-0
+broker-1
+broker-2
+
+Each broker requires:
+
+Plain Text
+Unique identity
+Persistent disk
+
+Use:
+
+Plain Text
+StatefulSet
+3. DaemonSet
+
+Used when you need:
+
+One pod on every node.
+
+Characteristics
+
+Whenever a new node joins:
+
+Plain Text
+Kubernetes automatically schedules the pod
+
+Whenever a node leaves:
+
+Plain Text
+Pod removed
+Example
+YAML
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+name: fluentd
+
+Cluster:
+
+Plain Text
+Node1
+Node2
+Node3
+
+Pods:
+
+Plain Text
+fluentd-node1
+fluentd-node2
+fluentd-node3
+ 
+
+One pod per node.
+
+Real-world Examples
+Logging
+Plain Text
+Fluentd
+Fluent Bit
+Filebeat
+
+Need log collection from every node.
+
+Use:
+
+Plain Text
+DaemonSet
+Monitoring
+Plain Text
+Node Exporter
+Datadog Agent
+CloudWatch Agent
+
+Need node metrics.
+
+Use:
+
+Plain Text
+DaemonSet
+`
+Networking
+Plain Text
+Cilium Agent
+Calico Node
+AWS VPC CNI
+
+Need networking agent on every node.
+
+Use:
+
+Plain Text
+DaemonSet
+Visual Comparison
+Deployment
+Plain Text
+Node1 -> App Pod
+Node2 -> App Pod
+Node3 -> App Pod
+ 
+
+Number based on replicas.
+
+Plain Text
+replicas = 3
+StatefulSet
+Plain Text
+mysql-0
+mysql-1
+mysql-2
+
+Each pod:
+
+Plain Text
+Unique identity
+Own storage
+DaemonSet
+Plain Text
+Node1 -> Agent
+Node2 -> Agent
+Node3 -> Agent
+Node4 -> Agent
+
+One pod per node.
+
+Interview Answer (2 Minutes)
+
+Deployment is used for stateless applications where pods are interchangeable and can be scaled easily. StatefulSet is used for stateful workloads like databases that require stable identities, persistent storage, and ordered deployment. DaemonSet is used when a pod must run on every node in the cluster, such as CNI plugins, monitoring agents, and log collectors.
+
+Easy Memory Trick
+Plain Text
+Deployment = Many identical app pods
+ 
+StatefulSet = Database pods with identity + storage
+ 
+DaemonSet = One pod on every node
+
+For Kubernetes mid-to-senior interviews, remember:
+
+Plain Text
+Nginx/API Server → Deployment
+MySQL/Kafka/MongoDB → StatefulSet
+Cilium/Fluentd/Node Exporter → DaemonSet
+
+The root network namespace is the default Linux network namespace associated with the host node. Physical interfaces (eth0/ens5), routing tables, iptables rules, bridges, and eBPF programs typically exist in this namespace. Kubernetes creates a separate network namespace for each Pod and connects it to the root namespace using veth pairs through a CNI plugin such as Cilium, Calico, or AWS VPC CNI. All Pod-to-Pod and Pod-to-external traffic ultimately traverses the host's root network namespace.
