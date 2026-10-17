@@ -2492,4 +2492,387 @@ Deny POST /admin
 
 This is one of the biggest advantages of Cilium over traditional networking solutions and is frequently discussed in senior Kubernetes networking interviews.
 
+What these components are
+Cilium Agent (DaemonSet)
+Plain Text
+cilium-724lx
+cilium-mwng8
+cilium-tzckb
+
+One pod per node.
+
+Responsible for:
+
+Loading eBPF programs
+Service load balancing
+Network policies
+Pod networking
+Identity management
+
+Verify:
+
+Shell
+kubectl -n kube-system get ds cilium
+ 
+Cilium Operator
+Plain Text
+cilium-operator-5d8b66fd95-6w8fl
+
+Responsible for:
+
+IPAM
+CRD management
+Cluster-wide coordination
+
+Verify:
+
+Shell
+kubectl -n kube-system get deployment cilium-operator
+Envoy
+Plain Text
+cilium-envoy-cct2w
+cilium-envoy-dlk5x
+cilium-envoy-pbpl5
+
+Used for:
+
+Plain Text
+Layer 7 Policies
+Ingress
+Gateway API
+HTTP visibility
+
+Example:
+
+Plain Text
+Allow GET
+Block POST
+Allow /health
+Block /admin
+
+Needs Envoy.
+
 Kubernetes Native NetworkPolicy is a standard Kubernetes resource used to control Pod-to-Pod and Pod-to-external traffic at Layers 3 and 4. Kubernetes defines the policy object, but enforcement is performed by the CNI plugin such as Cilium or Calico. Native NetworkPolicies can filter traffic based on pod selectors, namespace selectors, IP blocks, and ports, but they cannot enforce Layer 7 application-aware rules such as HTTP methods or URL paths. For Layer 7 enforcement, solutions like CiliumNetworkPolicy are used.
+Cilium Architecture
+Plain Text
+Kubernetes API Server
+|
+|
+Cilium Operator
+|
+-----------------------------------------------------
+Worker Node
+-----------------------------------------------------
+ 
+Cilium Agent
+(DaemonSet)
+|
+-------------------------------------
+| | |
+eBPF Maps eBPF Programs Hubble
+| | |
+-------------------------------------
+|
+Pod Traffic
+ 
+-----------------------------------------------------
+ 
+Hubble Relay
+|
+Hubble UI
+1. Cilium Agent (Most Important)
+
+Runs as a DaemonSet.
+
+Shell
+kubectl get pods -n kube-system | grep cilium
+
+Example:
+
+Plain Text
+cilium-abcde
+cilium-fghij
+cilium-klmno
+
+One Cilium pod per node.
+
+Responsibilities:
+
+Plain Text
+Load eBPF Programs
+Manage eBPF Maps
+Implement Services
+Enforce Policies
+Handle Routing
+Collect Flow Events
+
+Interview Answer:
+
+Cilium Agent is the node-level data plane component that loads and manages eBPF programs.
+
+2. eBPF Programs
+
+Loaded into the Linux kernel.
+
+Attached at:
+
+Plain Text
+veth interfaces
+tc hooks
+XDP hooks
+socket layer
+
+Responsibilities:
+
+Plain Text
+Packet Processing
+Load Balancing
+Service Lookup
+Policy Enforcement
+Routing
+Observability
+
+Packet flow:
+
+Plain Text
+Packet
+|
+eBPF
+|
+Forward / Drop
+3. eBPF Maps
+
+Think of them as kernel data structures.
+
+Store:
+
+Plain Text
+Pod IPs
+Service Information
+Backend Pods
+Policy Rules
+Connection Tracking
+
+Example:
+
+Plain Text
+Service:
+10.96.1.100
+ 
+Backends:
+10.244.1.10
+10.244.2.15
+10.244.3.20
+
+Stored in eBPF maps.
+
+Interview Question:
+
+Where does Cilium store service mappings?
+
+Answer:
+
+Plain Text
+eBPF Maps
+4. Cilium Operator
+
+Typically one or more replicas.
+
+Shell
+kubectl get pods -n kube-system | grep operator
+
+Example:
+
+Plain Text
+cilium-operator
+
+Responsibilities:
+
+Plain Text
+IPAM
+Node Management
+Garbage Collection
+Identity Management
+Cluster-wide Tasks
+
+Think:
+
+Plain Text
+Agent = Node Tasks
+ 
+Operator = Cluster Tasks
+
+Interview favorite question.
+
+5. Hubble
+
+Observability layer.
+
+Provides visibility into:
+
+Plain Text
+Pod → Pod
+Pod → Service
+Policy Decisions
+DNS
+HTTP
+gRPC
+
+Example:
+
+Shell
+hubble observe
+
+Output:
+
+Plain Text
+frontend -> backend ALLOWED
+ 
+frontend -> database DROPPED
+6. Hubble Relay
+
+Aggregates flow information.
+
+Without Relay:
+
+Plain Text
+Node1 Hubble
+Node2 Hubble
+Node3 Hubble
+
+With Relay:
+
+Plain Text
+Node1
+Node2
+Node3
+|
+v
+Hubble Relay
+
+Single place to query flows.
+
+7. Hubble UI
+
+Web dashboard.
+
+Shows:
+
+Plain Text
+Service Map
+Traffic Flow
+Dropped Packets
+DNS Queries
+Policies
+
+Architecture:
+
+Plain Text
+eBPF
+|
+Cilium Agent
+|
+Hubble Relay
+|
+Hubble UI
+8. Cilium CLI
+
+Used by operators.
+
+Examples:
+
+Shell
+cilium status
+ 
+cilium connectivity test
+ 
+cilium bpf lb list
+ 
+cilium endpoint list
+
+Useful in troubleshooting interviews.
+
+Packet Flow Through Cilium Components
+
+Suppose:
+
+Plain Text
+Pod A
+|
+backend-service
+|
+Pod B
+
+Flow:
+
+Plain Text
+Pod A
+|
+veth
+|
+Cilium eBPF Program
+|
+Service Lookup
+(eBPF Map)
+|
+Backend Selection
+|
+Policy Check
+(eBPF Map)
+|
+Routing
+|
+Pod B
+|
+Flow Export
+|
+Hubble
+ 
+Components You Must Memorize
+Plain Text
+Cilium Agent
+↓
+Loads eBPF programs
+ 
+eBPF Programs
+↓
+Packet processing
+ 
+eBPF Maps
+↓
+Service and policy data
+ 
+Cilium Operator
+↓
+Cluster-wide operations
+ 
+Hubble
+↓
+Observability
+ 
+Hubble Relay
+↓
+Flow aggregation
+ 
+Hubble UI
+↓
+Visualization
+Senior-Level Interview Question
+What is the difference between Cilium Agent and Cilium Operator?
+
+Answer:
+
+Plain Text
+Cilium Agent
+-------------
+Runs on every node
+Manages local eBPF programs
+Handles packet processing
+ 
+Cilium Operator
+----------------
+Runs as deployment
+Handles cluster-wide functions
+IPAM
+Identity allocation
+Garbage collection
