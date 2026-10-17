@@ -1,0 +1,20 @@
+Kube-proxy:
+kube-proxy is a Kubernetes networking component that runs on every node. It watches Services and EndpointSlices from the API Server and programs network rules using iptables or IPVS. When traffic is sent to a Service ClusterIP, the Linux kernel uses those rules to load balance the request to one of the backend Pods. In modern eBPF-based solutions like Cilium, kube-proxy can be completely replaced and Service load balancing is done directly by eBPF programs inside the kernel.
+
+Quick Diagram
+Plain Text
+Pod A
+|
+v
+Service VIP (10.96.0.10)
+|
+v
+kube-proxy rules
+|
++--> Pod B
++--> Pod C
++--> Pod D
+
+For Cilium interviews, remember this line:
+
+"kube-proxy manages Service load balancing using iptables/IPVS, whereas Cilium replaces kube-proxy by implementing Service load balancing directly with eBPF in the Linux kernel."
