@@ -1,0 +1,856 @@
+Container vs Virtual Machine
+
+Container
+
+Shares host OS kernel
+Lightweight
+Starts in seconds
+Common runtimes: Docker, containerd, CRI-O
+
+Virtual Machine
+
+Has its own guest OS
+Heavier
+Starts in minutes
+Runs on Hypervisors like VMware, Hyper-V, KVM
+
+"What is a container?"
+
+A container is a lightweight, portable unit that packages an application along with its dependencies and runs in isolation while sharing the host operating system kernel. Containers provide consistency across environments and are commonly managed using Docker and orchestrated using Kubernetes
+
+Kubernetes is a container orchestration platform that automates deployment, scaling, networking, and management of containerized applications..
+
+What happens if each Kubernetes component goes down?
+1. API Server Down
+Plain Text
+kubectl --> API Server ❌
+Impact
+
+✅ Existing pods keep running.
+
+❌ Cannot create pods.
+
+❌ Cannot delete pods.
+
+❌ Cannot scale deployments.
+
+❌ Controllers and Scheduler stop receiving updates.
+
+Example
+Shell
+kubectl get pods
+
+Returns:
+
+Plain Text
+Unable to connect to the server
+Running Applications?
+
+✅ Continue running because containers are already on worker nodes.
+
+2. ETCD Down
+Plain Text
+API Server --> ETCD ❌
+Impact
+
+Kubernetes loses its source of truth.
+
+Cannot:
+
+Create Pods
+Update Deployments
+Scale workloads
+Store cluster state
+Existing Pods?
+
+✅ Continue running.
+
+Worst Case
+
+If API Server restarts:
+
+Plain Text
+No ETCD
+=
+No cluster state
+
+Cluster becomes unusable.
+
+Interview Answer
+
+ETCD failure is one of the most critical failures because it stores the entire cluster state.
+
+3. Scheduler Down
+Plain Text
+Pod Created
+↓
+Pending
+↓
+Scheduler ❌
+Impact
+
+Existing pods:
+
+✅ Run normally
+
+New pods:
+
+❌ Stay Pending
+
+Example:
+
+Shell
+kubectl get pods
+Plain Text
+nginx Pending
+
+Reason:
+
+Plain Text
+No scheduler available
+Existing Nodes
+
+Continue serving traffic.
+
+4. Controller Manager Down
+
+Controllers stop working.
+
+Examples:
+
+Plain Text
+Deployment Controller
+Node Controller
+ReplicaSet Controller
+Job Controller
+Impact
+
+Suppose:
+
+YAML
+replicas: 3
+
+One pod crashes.
+
+Normally:
+
+Plain Text
+Controller creates replacement pod
+
+But now:
+
+Plain Text
+Pod dies
+No replacement created
+Effects
+
+❌ Self-healing lost
+
+❌ Replica maintenance lost
+
+❌ Failed nodes not detected
+
+✅ Existing pods continue running
+
+5. Kubelet Down
+
+Node Agent failure.
+
+Plain Text
+Worker Node
+↓
+Kubelet ❌
+Impact
+
+Node becomes:
+
+Plain Text
+NotReady
+
+Check:
+
+Shell
+kubectl get nodes
+ 
+
+Output:
+
+Plain Text
+worker-1 NotReady
+Running Pods
+
+May continue running temporarily.
+
+But:
+
+❌ Health status not reported
+
+❌ New pods cannot start
+
+❌ API Server cannot manage node
+
+After 5 Minutes
+
+Node Controller marks node unhealthy and starts rescheduling workloads elsewhere.
+
+6. Container Runtime Down
+
+Example:
+
+Plain Text
+containerd ❌
+
+or
+
+Plain Text
+CRI-O ❌
+Impact
+
+Cannot start containers.
+
+Cannot stop containers.
+
+Cannot pull images.
+
+Existing Containers
+
+Depends on runtime crash.
+
+Commonly:
+
+❌ Containers eventually stop.
+
+Node becomes unhealthy.
+
+Check:
+
+Shell
+systemctl status containerd
+7. Kube-Proxy Down
+Plain Text
+Service
+↓
+Kube-Proxy ❌
+Impact
+Existing Connections
+
+May work.
+
+New Service Traffic
+
+May fail.
+
+Example:
+
+Plain Text
+Frontend Service
+↓
+Backend Pods
+
+Load balancing stops updating.
+
+Pod-to-Pod Communication
+
+✅ Usually works.
+
+Service Access
+
+❌ Can fail.
+
+Cilium Interview Twist
+
+If using:
+
+Plain Text
+Cilium kube-proxy replacement
+
+Then kube-proxy failure doesn't matter because eBPF handles services.
+
+8. CoreDNS Down
+Plain Text
+myapp.default.svc.cluster.local
+
+DNS resolution fails.
+
+Impact
+
+Applications using names fail:
+
+Shell
+curl mysql-service
+
+Fails.
+
+Direct Pod IP
+Shell
+curl 10.0.1.25
+
+May still work.
+
+Symptoms
+Plain Text
+Temporary failure in name resolution
+9. Worker Node Down
+Plain Text
+Node Crash
+Impact
+
+All pods on that node disappear.
+
+Controller Manager notices.
+
+Deployment recreates pods elsewhere.
+
+Example:
+
+Plain Text
+Node1
+├── PodA
+├── PodB
+
+Node1 dies.
+
+Deployment creates:
+
+Plain Text
+Node2
+├── PodA
+├── PodB
+10. Master Node Down (Single Master)
+Plain Text
+Control Plane ❌
+Impact
+
+Entire control plane unavailable.
+
+Existing apps:
+
+✅ Usually keep running.
+
+Cannot:
+
+❌ Deploy
+
+❌ Scale
+
+❌ Schedule
+
+❌ Modify cluster
+
+This is why production uses:
+
+Plain Text
+3 Control Plane Nodes
+
+for High Availability.
+
+Most Important Interview Summary
+Component Down	What HappensAPI Server	Cluster cannot be managed
+ETCD	Cluster state lost/unavailable
+Scheduler	New Pods stay Pending
+Controller Manager	No self-healing
+Kubelet	Node becomes NotReady
+Container Runtime	Containers cannot run
+Kube-Proxy	Service routing issues
+CoreDNS	DNS resolution fails
+Worker Node	Pods rescheduled elsewhere
+Control Plane	Existing apps run, cluster management stops
+30-Second Senior-Level Answer
+
+If API Server goes down, cluster management stops. If ETCD goes down, the cluster loses its source of truth. If Scheduler is down, new pods remain Pending. If Controller Manager is down, self-healing stops. If Kubelet is down, the node becomes NotReady. If Container Runtime fails, containers cannot run. If CoreDNS fails, service discovery breaks. If Kube-Proxy fails, service routing is impacted. Existing running workloads generally continue until a node or runtime failure occurs.
+
+Kubernetes Architecture
+Plain Text
+User / DevOps Engineer
+|
+kubectl
+|
++---------------+
+| API Server |
++---------------+
+| | |
+| | |
+etcd <---+ | +----> Scheduler
+|
++----> Controller Manager
+|
++----> Cloud Controller Manager
+|
+AWS/Azure/GCP
+ 
+====================================================
+Worker Nodes
+====================================================
+ 
++-------------------------------+
+| Node-1 |
+| |
+| Kubelet |
+| Kube Proxy / eBPF(Cilium) |
+| Container Runtime |
+| (containerd) |
+| |
+| Pod A Pod B |
++-------------------------------+
+ 
++-------------------------------+
+| Node-2 |
+| |
+| Kubelet |
+| Kube Proxy / eBPF |
+| Container Runtime |
+| |
+| Pod C |
++-------------------------------+
+1. Control Plane Components
+
+This is the brain of Kubernetes.
+
+API Server
+Plain Text
+kube-apiserver
+
+Central entry point.
+
+Every Kubernetes component talks to API Server.
+
+Examples:
+
+Shell
+kubectl get pods
+kubectl apply -f deploy.yaml
+
+Flow:
+
+Plain Text
+kubectl
+|
+API Server
+
+Interview Question:
+
+Can Scheduler directly talk to etcd?
+
+Answer:
+
+No.
+
+All components communicate through API Server.
+
+etcd
+Plain Text
+Distributed Key-Value Database
+
+Stores cluster state.
+
+Examples:
+
+Plain Text
+Pods
+Deployments
+Services
+Secrets
+ConfigMaps
+Node Information
+
+Think:
+
+Plain Text
+etcd = Source of Truth
+
+Example:
+
+Shell
+kubectl create deployment nginx
+
+Stored in etcd as desired state.
+
+Interview Answer:
+
+Plain Text
+If API Server dies,
+cluster cannot be managed.
+ 
+If etcd dies,
+cluster state is lost.
+Scheduler
+Plain Text
+kube-scheduler
+ 
+
+Responsibility:
+
+Plain Text
+Find the best node
+for a pending pod.
+
+Checks:
+
+CPU
+Memory
+Taints
+Affinity
+Node selectors
+
+Example:
+
+YAML
+replicas: 3
+
+Deployment creates 3 Pods.
+
+Scheduler chooses:
+
+Plain Text
+Pod1 -> Node1
+Pod2 -> Node2
+Pod3 -> Node1
+
+Interview Question:
+
+What happens if scheduler is down?
+
+Answer:
+
+Plain Text
+Existing pods continue running.
+New pods cannot be scheduled.
+Controller Manager
+Plain Text
+kube-controller-manager
+
+Runs control loops.
+
+Examples:
+
+Deployment Controller
+
+Desired:
+
+Plain Text
+3 replicas
+
+Actual:
+
+Plain Text
+2 running
+
+Controller notices mismatch and creates 1 more pod.
+
+Node Controller
+
+Monitors nodes.
+
+If node becomes unreachable:
+
+Plain Text
+Node NotReady
+
+Pods rescheduled elsewhere.
+
+ReplicaSet Controller
+
+Maintains replica count.
+
+Interview Answer:
+
+Plain Text
+Controllers continuously reconcile
+actual state with desired state.
+Cloud Controller Manager
+
+Used mainly in EKS, AKS, GKE.
+
+Integrates Kubernetes with cloud.
+
+Examples:
+
+Plain Text
+ELB Creation
+Route Tables
+Volumes
+Instances
+
+Example:
+
+YAML
+type: LoadBalancer
+
+AWS creates:
+
+Plain Text
+ALB/NLB
+
+Automatically.
+
+2. Worker Node Components
+
+A node that runs applications.
+
+Kubelet
+
+Most important component on worker node.
+
+Responsibilities:
+
+Plain Text
+Receive instructions from API Server
+Start Pods
+Monitor Pods
+Send status back
+
+Example:
+
+Plain Text
+API Server
+|
+Kubelet
+|
+containerd
+|
+Pod
+
+Interview Question:
+
+Why doesn't API Server directly start containers?
+
+Answer:
+
+Plain Text
+API Server communicates with Kubelet.
+Kubelet communicates with runtime.
+Container Runtime
+
+Examples:
+
+Plain Text
+containerd
+CRI-O
+
+Old:
+
+Plain Text
+Docker
+
+Responsibility:
+
+Plain Text
+Pull image
+Run container
+Stop container
+
+Example:
+
+YAML
+image: nginx
+
+Runtime pulls:
+
+Plain Text
+docker.io/nginx
+Kube Proxy
+
+Provides Service networking.
+
+Traditionally uses:
+
+Plain Text
+iptables
+IPVS
+
+Example:
+
+Plain Text
+Service IP
+10.100.0.10
+
+Packet reaches kube-proxy.
+
+kube-proxy selects backend Pod.
+
+Plain Text
+Service
+|
+kube-proxy
+|
+Pod
+Cilium (eBPF Mode)
+
+Modern clusters replace kube-proxy.
+
+Packet flow:
+
+Plain Text
+Client
+↓
+Service
+↓
+eBPF Program
+↓
+Backend Pod
+
+No iptables traversal.
+
+Benefits:
+
+Plain Text
+Lower latency
+Better scalability
+Observability
+Network Policies
+
+This is frequently asked in interviews.
+
+Complete Pod Creation Flow
+
+Suppose:
+
+Shell
+kubectl apply -f nginx.yaml
+Step 1
+
+kubectl sends request.
+
+Plain Text
+kubectl
+|
+API Server
+Step 2
+
+API Server stores object in etcd.
+
+Plain Text
+API Server
+|
+etcd
+Step 3
+
+Deployment Controller sees new Deployment.
+
+Creates ReplicaSet.
+
+Plain Text
+Deployment
+|
+ReplicaSet
+Step 4
+
+ReplicaSet creates Pod.
+
+Plain Text
+Pod = Pending
+Step 5
+
+Scheduler selects node.
+
+Plain Text
+Pending Pod
+|
+Scheduler
+|
+Node1
+Step 6
+
+Kubelet notices assignment.
+
+Plain Text
+Node1 Kubelet
+
+Kubelet asks containerd:
+
+Plain Text
+Pull Image
+Create Container
+Start Pod
+Step 7
+
+Pod becomes:
+
+Plain Text
+Running
+
+Status goes to API Server.
+
+Plain Text
+Kubelet
+|
+API Server
+Kubernetes Architecture Interview Diagram
+
+Draw this on a whiteboard:
+
+Plain Text
++----------+
+| kubectl |
++----------+
+|
++---------------+
+| API SERVER |
++---------------+
+/ | \
+/ | \
+etcd Scheduler Controller
+Manager
+ 
+------------------------------------------------
+ 
+Worker Node
+ 
++---------------------+
+| Kubelet |
+| Kube Proxy/eBPF |
+| Container Runtime |
+| Pods |
++---------------------+
+Top Interview Questions
+What is the role of API Server?
+
+Single entry point to the cluster.
+
+Why etcd is important?
+
+Stores entire cluster state.
+
+What happens when Scheduler fails?
+
+Running Pods continue; new Pods stay Pending.
+
+What does Kubelet do?
+
+Manages Pods on a node.
+
+Difference between Kubelet and Kube-Proxy?
+Plain Text
+Kubelet -> Pod lifecycle
+KubeProxy -> Service networking
+How does Kubernetes maintain desired state?
+
+Using controllers in Controller Manager.
+
+In EKS, who provisions a LoadBalancer?
+
+Cloud Controller Manager communicates with AWS APIs.
+
+Where does Karpenter fit?
+
+For your EKS interviews:
+
+Plain Text
+Pending Pod
+|
+Karpenter watches
+|
+Creates EC2 Instance
+|
+Node Joins Cluster
+|
+Scheduler places Pod
+
+Since you've recently worked on Cluster Autoscaler and Karpenter, interviewers often ask:
+
+Plain Text
+Scheduler decides WHERE a pod runs.
+Karpenter decides WHEN to create a new node.
+
+This single line is a strong senior-level answer.
+
