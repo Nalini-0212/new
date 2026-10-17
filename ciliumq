@@ -1468,3 +1468,397 @@ Pod -> kube-proxy -> iptables -> Pod
  
 Modern Cilium:
 Pod -> eBPF -> Pod
+
+Q: What is Identity-Based Security in Cilium?
+
+Answer:
+
+Cilium uses security identities derived from Kubernetes labels instead of IP addresses. Each workload receives a unique identity, and eBPF enforces security policies based on these identities. This makes policies independent of pod IP changes and provides scalable, Kubernetes-native security.
+
+One-Line Interview Summary
+
+Traditional firewalls secure IP-to-IP communication, whereas Cilium secures workload-to-workload communication using label-based identities enforced directly in the kernel through eBPF.
+
+1. What is Cilium?
+
+Cilium is a Kubernetes CNI based on eBPF.
+
+Traditional networking:
+
+Plain Text
+Pod
+|
+iptables
+|
+kube-proxy
+|
+Destination Pod
+ 
+
+Cilium:
+
+Plain Text
+Pod
+|
+eBPF
+|
+Destination Pod
+
+Benefits:
+
+Plain Text
+Faster packet processing
+Better scalability
+Network policies
+Observability
+Kube-proxy replacement
+2. What is eBPF?
+
+eBPF = Extended Berkeley Packet Filter
+
+Think of it as:
+
+Plain Text
+Safe programs running inside Linux Kernel
+
+Instead of sending packets through many:
+
+Plain Text
+iptables chains
+
+eBPF intercepts packets directly in the kernel.
+
+Plain Text
+Packet
+|
+eBPF Program
+|
+Decision
+|
+Forward
+
+Capabilities:
+
+Plain Text
+Load balancing
+Routing
+Security
+Tracing
+Observability
+Network policies
+3. Kube-Proxy Replacement
+
+Traditional Kubernetes:
+
+Plain Text
+Client
+|
+Service IP
+|
+kube-proxy
+|
+iptables rules
+|
+Backend Pod
+
+Example:
+
+Plain Text
+Service
+10.96.1.100
+
+kube-proxy programs thousands of iptables rules.
+
+Problems:
+
+Plain Text
+Large clusters
+Many rules
+More latency
+Cilium Approach
+Plain Text
+Client
+|
+Service IP
+|
+eBPF Lookup
+|
+Backend Pod
+
+No kube-proxy.
+
+No huge iptables chains.
+
+Interview answer:
+
+Cilium can replace kube-proxy by implementing Kubernetes service load balancing directly in eBPF.
+
+4. Network Policies
+
+Network Policies control:
+
+Plain Text
+Who can talk to whom
+
+Example:
+
+Plain Text
+frontend
+|
+| Allowed
+v
+backend
+ 
+backend
+|
+| Denied
+v
+database
+
+Traditional Kubernetes policy:
+
+YAML
+kind: NetworkPolicy
+
+Cilium provides:
+
+YAML
+kind: CiliumNetworkPolicy
+
+More powerful.
+
+Example:
+
+Plain Text
+Allow frontend
+Deny everything else
+
+eBPF enforces policy in the kernel.
+
+Plain Text
+Packet
+|
+Policy Check
+|
+Allow/Drop
+ 
+5. Hubble
+
+Hubble is Cilium's observability platform.
+
+Common interview question:
+
+How do you troubleshoot traffic?
+
+Without Hubble:
+
+Plain Text
+tcpdump
+logs
+iptables
+
+With Hubble:
+
+Shell
+hubble observe
+
+See:
+
+Plain Text
+Source Pod
+Destination Pod
+Port
+Protocol
+Policy Action
+
+Example:
+
+Plain Text
+frontend -> backend ALLOWED
+ 
+frontend -> database DROPPED
+
+Architecture:
+
+Plain Text
+eBPF
+|
+Flow Events
+|
+Hubble
+Complete Packet Flow (Most Important)
+
+Suppose:
+
+Plain Text
+Pod A
+|
+Service
+|
+Pod B
+Step 1
+
+Application sends packet.
+
+Plain Text
+Pod A
+Shell
+curl backend-service
+Step 2
+
+Packet leaves Pod network namespace.
+
+Plain Text
+Pod A eth0
+|
+veth pair
+Step 3
+
+Packet reaches host root namespace.
+
+Plain Text
+Root Namespace
+
+Cilium eBPF hook intercepts it.
+
+Plain Text
+Packet
+|
+eBPF Program
+Step 4
+
+Service Lookup
+
+eBPF checks:
+
+Plain Text
+backend-service
+
+and finds backend pods.
+
+Example:
+
+Plain Text
+Pod B
+Pod C
+Pod D
+Step 5
+
+Load Balancing
+
+eBPF selects:
+
+Plain Text
+Pod C
+
+No kube-proxy.
+
+No iptables.
+
+Step 6
+
+Policy Enforcement
+
+Cilium checks policy.
+
+Plain Text
+Pod A -> Pod C ?
+
+Allowed?
+
+Plain Text
+YES → Continue
+NO → Drop
+Step 7
+
+Routing
+
+eBPF forwards packet.
+
+Plain Text
+Pod A
+|
+eBPF
+|
+Node Routing
+|
+Pod C
+Step 8
+
+Hubble records flow.
+
+Plain Text
+Source: Pod A
+Destination: Pod C
+Verdict: ALLOWED
+
+Visible through:
+
+Shell
+hubble observe
+Whiteboard Interview Flow
+
+Draw this:
+
+Plain Text
+Pod A
+|
+eth0
+|
+veth
+|
+--------------------------------
+Host Root Namespace
+ 
+eBPF Hook
+|
+Service Lookup
+|
+Load Balancer
+|
+Policy Check
+|
+Routing
+--------------------------------
+|
+veth
+|
+eth0
+|
+Pod B
+One-Line Answers for Interviews
+What is Cilium?
+
+A Kubernetes CNI that uses eBPF for networking, security, load balancing, and observability.
+
+What is eBPF?
+
+A mechanism to run sandboxed programs inside the Linux kernel for packet processing and observability.
+
+What is kube-proxy replacement?
+
+Cilium implements Kubernetes Services directly in eBPF, eliminating the need for kube-proxy and iptables-based load balancing.
+
+What are Network Policies?
+
+Rules that control which pods can communicate with each other, enforced by Cilium using eBPF.
+
+What is Hubble?
+
+Cilium's observability platform that provides real-time visibility into network flows, policy decisions, and packet paths.
+
+For a mid-to-senior Cilium interview, if you can confidently explain:
+
+Plain Text
+Pod Namespace
+→ veth Pair
+→ Host Root Namespace
+→ eBPF Hook
+→ Service Lookup
+→ Load Balancing
+→ Network Policy Check
+→ Routing
+→ Destination Pod
+→ Hubble Visibility
+
+you can answer a large portion of Kubernetes networking questions.
