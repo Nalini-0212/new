@@ -1862,3 +1862,634 @@ Pod Namespace
 → Hubble Visibility
 
 you can answer a large portion of Kubernetes networking questions.
+
+1. What is Cilium?
+
+Cilium is a Kubernetes CNI based on eBPF.
+
+Traditional networking:
+
+Plain Text
+Pod
+|
+iptables
+|
+kube-proxy
+|
+Destination Pod
+ 
+
+Cilium:
+
+Plain Text
+Pod
+|
+eBPF
+|
+Destination Pod
+
+Benefits:
+
+Plain Text
+Faster packet processing
+Better scalability
+Network policies
+Observability
+Kube-proxy replacement
+2. What is eBPF?
+
+eBPF = Extended Berkeley Packet Filter
+
+Think of it as:
+
+Plain Text
+Safe programs running inside Linux Kernel
+
+Instead of sending packets through many:
+
+Plain Text
+iptables chains
+
+eBPF intercepts packets directly in the kernel.
+
+Plain Text
+Packet
+|
+eBPF Program
+|
+Decision
+|
+Forward
+
+Capabilities:
+
+Plain Text
+Load balancing
+Routing
+Security
+Tracing
+Observability
+Network policies
+3. Kube-Proxy Replacement
+
+Traditional Kubernetes:
+
+Plain Text
+Client
+|
+Service IP
+|
+kube-proxy
+|
+iptables rules
+|
+Backend Pod
+
+Example:
+
+Plain Text
+Service
+10.96.1.100
+
+kube-proxy programs thousands of iptables rules.
+
+Problems:
+
+Plain Text
+Large clusters
+Many rules
+More latency
+Cilium Approach
+Plain Text
+Client
+|
+Service IP
+|
+eBPF Lookup
+|
+Backend Pod
+
+No kube-proxy.
+
+No huge iptables chains.
+
+Interview answer:
+
+Cilium can replace kube-proxy by implementing Kubernetes service load balancing directly in eBPF.
+
+4. Network Policies
+
+Network Policies control:
+
+Plain Text
+Who can talk to whom
+
+Example:
+
+Plain Text
+frontend
+|
+| Allowed
+v
+backend
+ 
+backend
+|
+| Denied
+v
+database
+
+Traditional Kubernetes policy:
+
+YAML
+kind: NetworkPolicy
+
+Cilium provides:
+
+YAML
+kind: CiliumNetworkPolicy
+
+More powerful.
+
+Example:
+
+Plain Text
+Allow frontend
+Deny everything else
+
+eBPF enforces policy in the kernel.
+
+Plain Text
+Packet
+|
+Policy Check
+|
+Allow/Drop
+ 
+5. Hubble
+
+Hubble is Cilium's observability platform.
+
+Common interview question:
+
+How do you troubleshoot traffic?
+
+Without Hubble:
+
+Plain Text
+tcpdump
+logs
+iptables
+
+With Hubble:
+
+Shell
+hubble observe
+
+See:
+
+Plain Text
+Source Pod
+Destination Pod
+Port
+Protocol
+Policy Action
+
+Example:
+
+Plain Text
+frontend -> backend ALLOWED
+ 
+frontend -> database DROPPED
+
+Architecture:
+
+Plain Text
+eBPF
+|
+Flow Events
+|
+Hubble
+Complete Packet Flow (Most Important)
+
+Suppose:
+
+Plain Text
+Pod A
+|
+Service
+|
+Pod B
+Step 1
+
+Application sends packet.
+
+Plain Text
+Pod A
+Shell
+curl backend-service
+Step 2
+
+Packet leaves Pod network namespace.
+
+Plain Text
+Pod A eth0
+|
+veth pair
+Step 3
+
+Packet reaches host root namespace.
+
+Plain Text
+Root Namespace
+
+Cilium eBPF hook intercepts it.
+
+Plain Text
+Packet
+|
+eBPF Program
+Step 4
+
+Service Lookup
+
+eBPF checks:
+
+Plain Text
+backend-service
+
+and finds backend pods.
+
+Example:
+
+Plain Text
+Pod B
+Pod C
+Pod D
+Step 5
+
+Load Balancing
+
+eBPF selects:
+
+Plain Text
+Pod C
+
+No kube-proxy.
+
+No iptables.
+
+Step 6
+
+Policy Enforcement
+
+Cilium checks policy.
+
+Plain Text
+Pod A -> Pod C ?
+
+Allowed?
+
+Plain Text
+YES → Continue
+NO → Drop
+Step 7
+
+Routing
+
+eBPF forwards packet.
+
+Plain Text
+Pod A
+|
+eBPF
+|
+Node Routing
+|
+Pod C
+Step 8
+
+Hubble records flow.
+
+Plain Text
+Source: Pod A
+Destination: Pod C
+Verdict: ALLOWED
+
+Visible through:
+
+Shell
+hubble observe
+Whiteboard Interview Flow
+
+Draw this:
+
+Plain Text
+Pod A
+|
+eth0
+|
+veth
+|
+--------------------------------
+Host Root Namespace
+ 
+eBPF Hook
+|
+Service Lookup
+|
+Load Balancer
+|
+Policy Check
+|
+Routing
+--------------------------------
+|
+veth
+|
+eth0
+|
+Pod B
+One-Line Answers for Interviews
+What is Cilium?
+
+A Kubernetes CNI that uses eBPF for networking, security, load balancing, and observability.
+
+What is eBPF?
+
+A mechanism to run sandboxed programs inside the Linux kernel for packet processing and observability.
+
+What is kube-proxy replacement?
+
+Cilium implements Kubernetes Services directly in eBPF, eliminating the need for kube-proxy and iptables-based load balancing.
+
+What are Network Policies?
+
+Rules that control which pods can communicate with each other, enforced by Cilium using eBPF.
+
+What is Hubble?
+
+Cilium's observability platform that provides real-time visibility into network flows, policy decisions, and packet paths.
+
+For a mid-to-senior Cilium interview, if you can confidently explain:
+
+Plain Text
+Pod Namespace
+→ veth Pair
+→ Host Root Namespace
+→ eBPF Hook
+→ Service Lookup
+→ Load Balancing
+→ Network Policy Check
+→ Routing
+→ Destination Pod
+→ Hubble Visibility
+
+you can answer a large portion of Kubernetes networking questions.
+
+Provide your feedback on BizChat
+layer 7 policies
+Layer 7 (L7) Policies in Cilium
+
+Most Kubernetes NetworkPolicies work at Layer 3/Layer 4:
+
+Plain Text
+Layer 3 = IP Address
+Layer 4 = TCP/UDP Port
+``
+
+Example:
+
+YAML
+Allow:
+Pod A
+->
+Pod B
+Port 80
+
+The policy doesn't know what HTTP request is being sent.
+
+Layer 7 Policy
+
+Cilium can inspect:
+
+Plain Text
+HTTP
+HTTPS (with visibility/TLS considerations)
+gRPC
+Kafka
+DNS
+ 
+
+and make decisions based on:
+
+Plain Text
+HTTP Method
+URL Path
+Headers
+DNS Query
+Kafka Topic
+
+This is called Layer 7 policy enforcement.
+
+Example
+
+Application:
+
+Plain Text
+frontend
+|
+v
+backend
+
+Requirement:
+
+Plain Text
+Allow:
+ 
+GET /health
+GET /api/products
+ 
+Deny:
+ 
+POST /admin
+DELETE /users
+
+Traditional NetworkPolicy cannot do this.
+
+It only sees:
+
+Plain Text
+TCP Port 80
+
+Cilium sees:
+
+Plain Text
+GET /health
+POST /admin
+
+and can allow or deny.
+
+Example Cilium HTTP Policy
+YAML
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+ 
+spec:
+endpointSelector:
+matchLabels:
+app: backend
+ 
+ingress:
+- fromEndpoints:
+- matchLabels:
+app: frontend
+ 
+toPorts:
+- ports:
+- port: "80"
+protocol: TCP
+ 
+rules:
+http:
+- method: GET
+path: "/health"
+
+Allowed:
+
+Shell
+GET /health
+
+Denied:
+
+Shell
+DELETE /health
+POST /admin
+GET /secret
+L3/L4 vs L7
+L3 Policy
+Plain Text
+Allow 10.0.0.10
+L4 Policy
+Plain Text
+Allow TCP 443
+L7 Policy
+Plain Text
+Allow GET /health
+Allow GET /products
+Deny POST /admin
+
+Much more granular.
+
+DNS Policy Example
+
+Allow only:
+
+Plain Text
+amazonaws.com
+
+Example:
+
+Plain Text
+api.amazonaws.com
+
+Allowed.
+
+Plain Text
+google.com
+
+Denied.
+
+This is common in fintech and regulated environments.
+
+gRPC Example
+
+Microservices:
+
+Plain Text
+frontend
+|
+gRPC
+|
+backend
+
+Allow only:
+
+Plain Text
+GetUser()
+
+Deny:
+
+Plain Text
+DeleteUser()
+
+Cilium can enforce this at L7.
+
+Packet Flow with L7 Policy
+Plain Text
+Pod A
+|
+| GET /products
+|
+veth
+|
+eBPF
+|
+L7 Proxy
+|
+Policy Check
+|
+Allow
+|
+Pod B
+
+For HTTP-aware policies, Cilium uses an application-aware proxy (Envoy) together with eBPF.
+
+Interview Question
+Why can't Kubernetes NetworkPolicy do L7 filtering?
+
+Because standard Kubernetes NetworkPolicy operates only at:
+
+Plain Text
+Layer 3
+Layer 4
+
+It understands:
+
+Plain Text
+IP
+Port
+Protocol
+
+It does not understand:
+
+Plain Text
+HTTP URL
+HTTP Method
+gRPC Calls
+Kafka Topics
+Common Interview Answer
+
+What is a Layer 7 Policy in Cilium?
+
+Layer 7 policies allow traffic control based on application-level information such as HTTP methods, URL paths, DNS queries, gRPC methods, and Kafka topics. Unlike standard Kubernetes NetworkPolicies, which operate at Layers 3 and 4, Cilium can enforce application-aware security policies using eBPF together with protocol-aware proxies.
+
+Easy Interview Memory
+Plain Text
+L3 = Who? (IP)
+L4 = Which Port? (TCP/UDP)
+L7 = What Request? (HTTP/gRPC/DNS)
+
+Example:
+
+Plain Text
+Frontend -> Backend
+ 
+L3 : Allow Pod
+L4 : Allow Port 80
+L7 : Allow GET /health
+Deny POST /admin
+
+This is one of the biggest advantages of Cilium over traditional networking solutions and is frequently discussed in senior Kubernetes networking interviews.
+
+Kubernetes Native NetworkPolicy is a standard Kubernetes resource used to control Pod-to-Pod and Pod-to-external traffic at Layers 3 and 4. Kubernetes defines the policy object, but enforcement is performed by the CNI plugin such as Cilium or Calico. Native NetworkPolicies can filter traffic based on pod selectors, namespace selectors, IP blocks, and ports, but they cannot enforce Layer 7 application-aware rules such as HTTP methods or URL paths. For Layer 7 enforcement, solutions like CiliumNetworkPolicy are used.
