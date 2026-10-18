@@ -1,1 +1,414 @@
 Cilium L7 policy enforcement extends network security beyond IPs and ports. Using eBPF and Envoy, Cilium can inspect application-layer traffic such as HTTP, gRPC, Kafka, and DNS. Policies can allow or deny specific URLs, HTTP methods, headers, or API calls. Combined with Cilium identities derived from Kubernetes labels, security policies remain consistent even when pod IPs change, providing zero-trust microsegmentation for Kubernetes workloads.
+Hubble is Cilium's observability platform. It leverages eBPF-generated flow data and provides visibility into pod-to-pod, pod-to-service, and pod-to-external communication. It shows which workloads are communicating, DNS queries, HTTP requests and responses, TCP connections, whether traffic is allowed or dropped, and helps validate Cilium Network Policies. It is widely used for troubleshooting, security monitoring, and network flow visualization in Kubernetes clusters
+PodA eth0
+   |
+veth
+   |
+eBPF
+   |
+Node1 eth0
+   |
+Network
+   |
+Node2 eth0
+   |
+eBPF
+   |
+veth
+   |
+PodB eth0
+For eBPF interviews, you should know these core terminologies. These terms come up frequently when discussing Cilium, Kubernetes networking, observability, and security.
+
+1. eBPF (Extended Berkeley Packet Filter)
+
+A technology that allows programs to run safely inside the Linux kernel without modifying kernel source code.
+
+Plain Text
+User Space
+|
+eBPF Program
+|
+Linux Kernel
+
+Think of it as:
+
+"Run custom logic inside the kernel."
+
+2. eBPF Program
+
+The code loaded into the kernel.
+
+Examples:
+
+Packet filtering
+Network policy enforcement
+Tracing system calls
+Observability
+Plain Text
+Packet
+|
+eBPF Program
+|
+Allow / Drop / Redirect
+3. Hook
+
+A location where an eBPF program attaches.
+
+Common hooks:
+
+XDP Hook
+
+Attached very early in packet processing.
+
+Plain Text
+NIC
+|
+XDP Hook
+|
+Kernel Networking Stack
+
+Use cases:
+
+DDoS protection
+Fast packet filtering
+TC (Traffic Control) Hook
+
+Attached at ingress or egress.
+
+Plain Text
+Packet
+|
+TC Ingress
+|
+Kernel
+|
+TC Egress
+
+Used by Cilium extensively.
+
+Kprobe
+
+Attach to a kernel function.
+
+Plain Text
+tcp_connect()
+^
+Kprobe
+
+Used for tracing.
+
+Tracepoint
+
+Kernel-defined tracing point.
+
+Plain Text
+sys_enter_open
+sys_exit_open
+
+Safer than kprobes.
+
+4. eBPF Maps
+
+Shared storage between kernel and userspace.
+
+Think of it like a hash table.
+
+Plain Text
+Key -> Value
+
+Example:
+
+Plain Text
+Pod-IP -> Identity
+ 
+10.244.1.10 -> frontend
+10.244.2.20 -> backend
+
+Cilium stores:
+
+Endpoint identities
+Policy information
+Service backends
+
+inside maps.
+
+5. Verifier
+
+Before loading a program, the kernel verifies it.
+
+Checks:
+
+✅ no infinite loops
+
+✅ memory safety
+
+✅ safe execution
+
+Plain Text
+eBPF Program
+|
+Verifier
+|
+Accept / Reject
+
+Without the verifier, eBPF could crash the kernel.
+
+6. JIT Compiler
+
+Converts eBPF bytecode into native CPU instructions.
+
+Plain Text
+eBPF Bytecode
+|
+JIT Compiler
+|
+CPU Instructions
+
+Benefit:
+
+Very fast execution
+7. BPF Bytecode
+
+Intermediate code generated from C source.
+
+Plain Text
+C Program
+|
+clang
+|
+BPF Bytecode
+|
+Kernel
+8. User Space
+
+Applications running outside the kernel.
+
+Examples:
+
+Plain Text
+kubectl
+hubble
+cilium-agent
+curl
+9. Kernel Space
+
+Core Linux operating system.
+
+Examples:
+
+Plain Text
+scheduler
+tcp/ip stack
+memory manager
+drivers
+
+eBPF executes here.
+
+10. Identity
+
+Important Cilium term.
+
+Instead of using IP addresses:
+
+Plain Text
+frontend = Identity 1234
+backend = Identity 5678
+
+Policies operate on identities.
+
+Benefits:
+
+Pod IPs can change
+Identity stays constant
+11. Endpoint
+
+A Cilium-managed pod.
+
+Example:
+
+Plain Text
+frontend Pod
+|
+Cilium Endpoint
+
+Check:
+
+Shell
+cilium endpoint list
+12. Service Load Balancing
+
+eBPF can replace kube-proxy.
+
+Traditional:
+
+Plain Text
+Service
+|
+iptables
+|
+Backend
+
+Cilium:
+
+Plain Text
+Service
+|
+eBPF
+|
+Backend
+
+Faster and fewer kernel traversals.
+
+13. kube-proxy Replacement
+
+One of Cilium's biggest features.
+
+Instead of:
+
+Plain Text
+iptables
+
+or
+
+Plain Text
+IPVS
+
+Cilium uses eBPF maps.
+
+Plain Text
+Service IP
+|
+BPF Map
+|
+Backend Pod
+ 
+14. Flow
+
+A communication event.
+
+Example:
+
+Plain Text
+frontend -> backend
+TCP 80
+
+Hubble collects flows.
+
+15. Observability
+
+Seeing what's happening in the cluster.
+
+Examples:
+
+who talked
+what was sent
+allowed or dropped
+DNS request
+HTTP request
+
+Tool:
+
+Plain Text
+Hubble
+16. Network Policy
+
+Rules controlling communication.
+
+Example:
+
+Plain Text
+Frontend
+|
+Allowed
+|
+Backend
+
+Implemented by Cilium eBPF programs.
+
+17. Datapath
+
+Actual packet forwarding path.
+
+Example:
+
+Plain Text
+Pod A
+|
+eBPF Datapath
+|
+Pod B
+
+In Cilium interviews you'll often hear:
+
+"Cilium replaces the Kubernetes datapath using eBPF."
+
+18. Tail Call
+
+One eBPF program calling another.
+
+Plain Text
+Program A
+|
+Tail Call
+|
+Program B
+
+Used to break large logic into smaller programs.
+
+19. Encapsulation
+
+Used when pods are on different nodes.
+
+Examples:
+
+Plain Text
+VXLAN
+Geneve
+
+Packet:
+
+Plain Text
+Original Packet
+|
+Encapsulation
+|
+Network
+20. Direct Routing
+
+Alternative to VXLAN.
+
+Packet goes directly between nodes.
+
+Plain Text
+Node A ---> Node B
+
+Less overhead than tunneling.
+
+Cilium + eBPF Flow (Most Important Interview Diagram)
+Plain Text
+Frontend Pod
+|
+v
+veth
+|
+eBPF TC Hook
+|
+Policy Check
+|
+Service Lookup
+|
+Backend Selection
+|
+Routing Decision
+|
+Node Network
+|
+Remote Node
+|
+Backend Pod
+
+Interview explanation:
+
+When a packet leaves a pod, it passes through a veth pair into the node network namespace. At the TC hook, Cilium's eBPF program executes. The program performs service lookup, backend selection, policy enforcement, and routing decisions. The packet is then forwarded directly to the destination pod, often bypassing iptables and kube-proxy.
+
+eth0 is a network interface. On a Kubernetes node, eth0 is usually the physical or cloud network interface connected to the cluster network. A veth is a virtual Ethernet pair acting like a cable between a pod network namespace and the node network namespace. The pod sees one end as its own eth0, while the other end exists on the host. In Cilium, eBPF programs are attached to these veth interfaces and node interfaces to perform routing, service load balancing, and network policy enforcement directly in the Linux kernel.
