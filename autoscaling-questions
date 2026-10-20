@@ -1716,3 +1716,470 @@ When asked any autoscaling scenario, finish with:
 "I always look at the complete chain: Metrics → HPA → Scheduler → Cluster Autoscaler → CNI (Cilium) → Application behavior. The issue is usually somewhere in that path."
 
 That answer immediately signals senior-level troubleshooting thinking
+
+HPA Internals
+Q1. How exactly does HPA calculate desired replicas?
+Expected Answer
+Plain Text
+Desired Replicas =
+Current Replicas ×
+(Current Metric / Desired Metric)
+
+Example:
+
+Plain Text
+Current Pods = 4
+CPU Usage = 80%
+Target = 40%
+ 
+Desired Replicas =
+4 × (80/40)
+= 8
+Q2. Why does HPA require CPU requests?
+Expected Answer
+
+Because CPU utilization is calculated against requests.
+
+Example:
+
+YAML
+requests:
+cpu: 500m
+
+Usage:
+
+Plain Text
+250m
+
+Utilization:
+
+Plain Text
+250/500 = 50%
+
+Without requests HPA cannot determine utilization correctly.
+
+Q3. Difference between CPU Usage and CPU Utilization?
+Answer
+
+CPU Usage:
+
+Plain Text
+Actual CPU consumed
+
+Example:
+
+Plain Text
+300m
+
+CPU Utilization:
+
+Plain Text
+Usage / Requests
+
+Example:
+
+Plain Text
+300m / 500m
+=
+60%
+
+HPA generally works with utilization.
+
+Metrics Questions
+Q4. Why use Prometheus if Metrics Server exists?
+Answer
+
+Metrics Server:
+
+Plain Text
+CPU
+Memory
+Short-term metrics
+
+Prometheus:
+
+Plain Text
+Historical metrics
+Custom metrics
+Alerting
+Dashboards
+Business metrics
+
+Metrics Server supports HPA.
+
+Prometheus supports observability.
+
+Q5. Explain Metrics Pipeline.
+Answer
+Plain Text
+cAdvisor
+↓
+Kubelet
+↓
+Metrics Server
+↓
+API Server
+↓
+HPA Controller
+
+Very common question.
+
+Q6. Can HPA work without Metrics Server?
+Answer
+
+For CPU and Memory:
+
+Plain Text
+NO
+
+For custom metrics:
+
+Plain Text
+Can use Prometheus Adapter
+
+instead of Metrics Server metrics.
+
+Scheduler + Autoscaling
+Q7. HPA creates 50 Pods. Scheduler cannot place them. Why?
+Answer
+
+Possible reasons:
+
+Plain Text
+Insufficient CPU
+Insufficient Memory
+Node Selector mismatch
+Taints
+Affinity rules
+Storage issues
+
+Need:
+
+Shell
+kubectl describe pod
+
+to verify.
+
+Q8. Does HPA talk directly to Cluster Autoscaler?
+Answer
+
+No.
+
+Workflow:
+
+Plain Text
+HPA
+↓
+Creates Pods
+↓
+Pods Pending
+↓
+Cluster Autoscaler detects
+↓
+Adds Node
+
+No direct communication.
+
+Interview favorite.
+
+VPA Questions
+Q9. Why doesn't everyone use VPA?
+Answer
+
+Because:
+
+Plain Text
+Pod restart required
+
+for resource changes.
+
+For customer-facing applications:
+
+Plain Text
+Restart ≠ preferred
+
+So HPA is often chosen first.
+
+Q10. When would you choose VPA over HPA?
+Answer
+
+For applications that:
+
+Plain Text
+Need large memory
+Cannot scale horizontally
+Stateful workloads
+Databases
+
+Examples:
+
+Plain Text
+Postgres
+MongoDB
+ElasticSearch
+Production Incident Questions
+Q11. Traffic doubled but HPA didn't scale. Where will you check?
+Model Answer
+Shell
+kubectl get hpa
+kubectl describe hpa
+kubectl top pods
+kubectl top nodes
+kubectl get events
+
+Then verify:
+
+Plain Text
+Metrics available?
+CPU requests defined?
+Scaling policies?
+MaxReplicas reached?
+Q12. HPA says 50 replicas but only 10 running.
+Answer
+
+Investigate:
+
+Shell
+kubectl get pods
+kubectl describe pods
+
+Possible causes:
+
+Plain Text
+Pending Pods
+Image Pull Errors
+Quota limits
+Scheduling failures
+Q13. Why did HPA scale down healthy pods?
+Answer
+
+Because:
+
+Plain Text
+Metrics dropped below threshold
+
+HPA only considers target metrics.
+
+It doesn't understand:
+
+Plain Text
+Business events
+Upcoming traffic
+Manual expectations
+Design Questions
+Q14. Would you use CPU scaling for an API Gateway?
+Senior Answer
+
+Not alone.
+
+Consider:
+
+Plain Text
+RPS
+Latency
+Connection count
+
+CPU doesn't always correlate with traffic.
+
+Q15. How would you autoscale NGINX Ingress?
+Answer
+
+Metrics:
+
+Plain Text
+CPU
+Memory
+Requests Per Second
+
+via:
+
+Plain Text
+Prometheus + HPA
+Q16. Autoscaling Database Pods?
+Answer
+
+Be careful.
+
+Challenges:
+
+Plain Text
+Replication
+Storage
+Leader Election
+Consistency
+
+Not as simple as stateless deployments.
+
+KEDA Questions
+Q17. Why KEDA instead of HPA?
+Answer
+
+HPA mainly scales on:
+
+Plain Text
+CPU
+Memory
+
+KEDA scales on:
+
+Plain Text
+Kafka Lag
+RabbitMQ Depth
+Azure Service Bus
+AWS SQS
+Redis Streams
+Prometheus Queries
+Q18. Explain Scale-to-Zero.
+Answer
+Plain Text
+5 Pods
+↓
+0 Pods
+
+No workload.
+
+Incoming event:
+
+Plain Text
+0
+↓
+1
+↓
+N
+
+Cost savings.
+
+Cluster Autoscaler Questions
+Q19. How does Cluster Autoscaler know a new node is needed?
+Answer
+
+It watches:
+
+Plain Text
+Unschedulable Pods
+
+Example:
+
+Plain Text
+0/5 nodes available:
+Insufficient memory
+
+Then requests cloud provider for additional node.
+
+Q20. Why would Cluster Autoscaler refuse to remove a node?
+Answer
+
+Possible reasons:
+
+Plain Text
+DaemonSets
+Local Storage
+PodDisruptionBudget
+Node still needed
+Advanced Questions
+Q21. HPA with Cilium. Any networking concerns?
+Answer
+
+As pods scale:
+
+Plain Text
+New Pod Created
+↓
+IP Assigned by Cilium
+↓
+eBPF Maps Updated
+↓
+Service Endpoints Updated
+↓
+Traffic Distributed
+
+Need sufficient:
+
+Plain Text
+IP Pool Capacity
+Node Resources
+Q22. Why might scaling actually hurt performance?
+Answer
+
+Because:
+
+Plain Text
+Cold start time
+Cache warm-up
+Database bottlenecks
+Connection limits
+
+Adding pods doesn't always increase throughput.
+
+Senior-level answer.
+
+Q23. What is cooldown period and stabilization window?
+Answer
+
+Prevents:
+
+Plain Text
+Scale up
+Scale down
+Scale up
+Scale down
+
+known as:
+
+Plain Text
+Autoscaling Flapping
+Q24. How would you test HPA?
+Answer
+
+Generate load.
+
+Example:
+
+Shell
+kubectl run load \
+--image=busybox \
+--restart=Never \
+-- sh -c "while true; do wget -q -O- http://frontend; done"
+
+Monitor:
+
+Shell
+kubectl get hpa -w
+kubectl get pods -w
+Very Popular Senior-Level Question
+Q25. Draw the End-to-End Autoscaling Flow
+
+A strong answer:
+
+Plain Text
+User Traffic
+↓
+Load Balancer
+↓
+Ingress
+↓
+Frontend Pods
+↓
+Metrics Server
+↓
+HPA
+↓
+Replica Increase
+↓
+Scheduler
+↓
+Node Capacity Check
+↓
+Cluster Autoscaler
+↓
+New Node
+↓
+Cilium CNI
+↓
+Pod IP Allocation
+↓
+eBPF Service Update
+↓
+Traffic Reaches New Pods
+
+If you can explain this entire flow confidently, including HPA + Scheduler + Cluster Autoscaler + Cilium networking, you will be operating at a strong senior Kubernetes interview level.
