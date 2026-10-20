@@ -1,0 +1,101 @@
+What is a Cordoned Node in Kubernetes?
+
+Cordoning a node means marking a node as unschedulable, so Kubernetes does not place any new pods on that node.
+
+✅ Existing pods continue running.
+ ✅ New pods are scheduled on other available nodes.
+ ❌ No new workloads are placed on the cordoned node.
+
+Command
+Shell
+kubectl cordon <node-name>
+
+Example:
+
+Shell
+kubectl cordon worker-node-1
+
+Output:
+
+Shell
+node/worker-node-1 cordoned
+Check Status
+Shell
+kubectl get nodes
+``
+
+Example:
+
+Plain Text
+NAME STATUS ROLES
+worker-node-1 Ready,SchedulingDisabled <none>
+worker-node-2 Ready <none>
+
+SchedulingDisabled indicates the node is cordoned.
+
+When Do We Use Cordoning?
+1. Planned Maintenance
+
+Before patching or rebooting a node:
+
+Shell
+kubectl cordon worker-node-1
+
+This prevents new pods from landing on the node while you prepare for maintenance.
+
+2. Before Draining
+
+Typical maintenance workflow:
+
+Shell
+kubectl cordon worker-node-1
+kubectl drain worker-node-1 --ignore-daemonsets
+Cordon = stop new pods.
+Drain = safely evict existing pods.
+3. Troubleshooting
+
+If a node is behaving abnormally:
+
+Shell
+kubectl cordon worker-node-1
+
+You can investigate without affecting new application deployments.
+
+Difference Between Cordon and Drain
+Command	New Pods Scheduled?	Existing Podscordon	❌ No	✅ Continue running
+drain	❌ No	❌ Evicted and moved elsewhere
+
+Think of it as:
+
+Cordon = Close the hotel for new guests. Existing guests stay.
+Drain = Ask existing guests to leave and close the hotel.
+Uncordon
+
+After maintenance:
+
+Shell
+kubectl uncordon worker-node-1
+
+Output:
+
+Shell
+node/worker-node-1 uncordoned
+ 
+
+The scheduler can now place new pods on the node.
+
+Interview Question
+
+Q: What happens if you cordon a node running a Deployment with 10 pods?
+
+Answer: The 10 existing pods continue running on that node. If one of those pods crashes and needs recreation, Kubernetes schedules the replacement pod on another schedulable node because the cordoned node no longer accepts new pods.
+
+For mid-to-senior Kubernetes interviews, remember the maintenance sequence:
+
+Shell
+kubectl cordon <node>
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+# perform maintenance
+kubectl uncordon <node>
+
+This is the standard node maintenance workflow used in production clusters.
