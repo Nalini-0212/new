@@ -1,0 +1,323 @@
+Pod Disruption During Scale (Kubernetes)
+
+This is a common mid-to-senior level Kubernetes interview and production scenario.
+
+What is Pod Disruption?
+
+A disruption is when a Pod gets terminated and must be recreated elsewhere.
+
+There are two types:
+
+1. Voluntary Disruption
+
+Initiated by administrators or Kubernetes.
+
+Examples:
+
+Node drain
+Cluster upgrade
+Scaling down node groups
+VM maintenance
+Node replacement
+Shell
+kubectl drain <node>
+2. Involuntary Disruption
+
+Unexpected failures.
+
+Examples:
+
+Node crash
+Kernel panic
+Hardware failure
+Cloud VM failure
+Network partition
+
+Kubernetes cannot prevent these but can recover from them.
+
+Scenario: Deployment Scaling Down
+
+Suppose:
+
+YAML
+Deployment: frontend
+Replicas: 5
+
+Pods:
+
+Plain Text
+frontend-1
+frontend-2
+frontend-3
+frontend-4
+frontend-5
+
+Scale down:
+
+Shell
+kubectl scale deploy frontend --replicas=2
+
+Kubernetes terminates 3 pods.
+
+This is a voluntary disruption.
+
+Problem During Scale Operations
+
+Imagine:
+
+Plain Text
+Frontend Pods = 10
+Backend Pods = 5
+
+Scale frontend:
+
+Shell
+10 → 100 replicas
+
+Issues can occur:
+
+1. Traffic Imbalance
+
+New pods start but are not ready.
+
+Without readiness probes:
+
+Plain Text
+Service
+↓
+New Pod (Starting)
+``
+
+Requests fail.
+
+Solution:
+
+YAML
+readinessProbe:
+httpGet:
+path: /health
+port: 80
+2. Connection Drops
+
+Existing pod serving requests gets terminated.
+
+Plain Text
+Client
+↓
+frontend-3
+
+Pod deleted before request finishes.
+
+User sees:
+
+Plain Text
+HTTP 500
+Connection reset
+
+Solution:
+
+YAML
+terminationGracePeriodSeconds: 30
+
+And:
+
+YAML
+lifecycle:
+preStop:
+exec:
+command:
+- sleep
+- "15"
+
+This allows:
+
+Remove pod from Service
+Finish existing requests
+Exit gracefully
+Pod Disruption Budget (PDB)
+
+PDB protects applications during voluntary disruptions.
+
+Without PDB:
+
+Plain Text
+5 Pods
+Drain Node
+↓
+All 5 affected
+Application down
+
+With PDB:
+
+YAML
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+name: frontend-pdb
+spec:
+minAvailable: 3
+selector:
+matchLabels:
+app: frontend
+
+Meaning:
+
+Plain Text
+Total Pods = 5
+At least 3 must remain running
+
+Only 2 can be disrupted simultaneously.
+
+Scale-Down Example with PDB
+
+Deployment:
+
+YAML
+replicas: 5
+
+PDB:
+
+YAML
+minAvailable: 4
+
+Kubernetes ensures:
+
+Plain Text
+Running Pods >= 4
+
+during node drains/upgrades.
+
+HPA + Disruption
+
+Suppose HPA manages:
+
+Plain Text
+Min = 3
+Max = 20
+Current = 10
+
+Node failure occurs.
+
+Plain Text
+10 Pods
+↓
+5 Pods survive
+``
+
+HPA sees:
+
+Plain Text
+CPU = 95%
+
+Scales:
+
+Plain Text
+5 → 10 → 15
+
+to recover load.
+
+Stateful Applications
+
+For databases:
+
+Plain Text
+MongoDB
+Kafka
+Etcd
+ZooKeeper
+
+Disruption is more dangerous.
+
+Example:
+
+3-node etcd cluster
+
+Plain Text
+etcd-1
+etcd-2
+etcd-3
+
+Disrupt 2 pods:
+
+Plain Text
+Quorum lost
+
+Cluster unavailable.
+
+PDB:
+
+YAML
+minAvailable: 2
+
+ensures quorum remains.
+
+Cilium View of Pod Disruption
+
+Since you're working on Cilium demos:
+
+When a pod is deleted:
+
+Plain Text
+Frontend Pod
+↓
+Endpoint Removed
+↓
+eBPF Maps Updated
+↓
+Service Load Balancing Updated
+
+Cilium automatically:
+
+Removes pod endpoint
+Updates service backend map
+Stops forwarding traffic
+Redirects to healthy pods
+
+You can observe:
+
+Shell
+hubble observe
+
+or
+
+Shell
+cilium service list
+
+during scaling.
+
+Senior-Level Interview Question
+
+Q: During a node drain, how do you ensure application availability?
+
+Answer:
+
+Multiple replicas
+Readiness probes
+Pod Disruption Budget
+Graceful termination
+Anti-affinity across nodes
+HPA for recovery
+Monitor with Cilium/Hubble
+Real Production Flow
+Plain Text
+Node Drain
+↓
+Pod receives SIGTERM
+↓
+PreStop Hook
+↓
+Removed from Service
+↓
+Existing requests complete
+↓
+Pod exits
+↓
+Replacement Pod starts
+↓
+Readiness Probe passes
+↓
+Traffic resumes
+
+For your Kubernetes + Cilium interview prep, remember this one-liner:
+
+Scaling itself is not the challenge; maintaining application availability during pod termination and recreation is the real challenge. PDB, readiness probes, and graceful shutdown solve that problem.
