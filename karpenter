@@ -923,3 +923,540 @@ Cost Savings
 Senior-Level One-Liner
 
 HPA scales workloads horizontally, VPA optimizes resource requests vertically, and Karpenter ensures the cluster has the right compute capacity by dynamically provisioning and deprovisioning nodes based on actual scheduling demand.
+
+
+If you're targeting mid-to-senior Kubernetes / Platform Engineer / SRE / Cloud Engineer roles, Karpenter is becoming a very hot topic, especially in AWS EKS environments.
+
+Interviewers usually compare:
+
+Plain Text
+HPA
+VPA
+Cluster Autoscaler
+Karpenter
+
+and expect you to know where Karpenter fits.
+
+1. Fundamental Question
+What is Karpenter?
+Model Answer
+
+"Karpenter is an open-source Kubernetes node provisioning solution, primarily used with EKS, that automatically launches the right compute capacity in response to unschedulable pods.
+
+Unlike Cluster Autoscaler, which scales predefined Auto Scaling Groups, Karpenter directly provisions nodes based on pod requirements."
+
+Architecture:
+
+Plain Text
+Pending Pod
+↓
+Scheduler
+↓
+Unschedulable
+↓
+Karpenter
+↓
+EC2 Instance Created
+↓
+Node Joins Cluster
+↓
+Pod Scheduled
+2. Karpenter vs Cluster Autoscaler
+Most Common Interview Question
+Model Answer
+
+Cluster Autoscaler:
+
+Plain Text
+Scales existing node groups
+
+Example:
+
+Plain Text
+Node Group A
+min=2
+max=10
+
+Cluster Autoscaler only changes count.
+
+Karpenter:
+
+Plain Text
+Creates nodes dynamically
+
+Example:
+
+Plain Text
+Pod needs:
+16 CPU
+64 GB RAM
+
+Karpenter can directly provision:
+
+Plain Text
+m7i.4xlarge
+
+without predefined node groups.
+
+3. Why Is Karpenter Faster?
+Model Answer
+
+Cluster Autoscaler:
+
+Plain Text
+Pod Pending
+↓
+Choose Node Group
+↓
+Increase ASG
+↓
+Launch Instance
+
+Karpenter:
+
+Plain Text
+Pod Pending
+↓
+Analyze Pod Requirement
+↓
+Launch Best Instance
+
+Fewer steps.
+
+Better bin-packing.
+
+4. What Problem Does Karpenter Solve?
+Model Answer
+
+Traditional EKS cluster:
+
+Plain Text
+General Purpose ASG
+Memory Optimized ASG
+Compute Optimized ASG
+GPU ASG
+
+Many node groups.
+
+Operational complexity.
+
+Karpenter eliminates most of these by selecting the right instance automatically.
+
+5. When Does Karpenter Trigger?
+Answer
+
+When pods become:
+
+Plain Text
+Pending
+
+because of:
+
+Plain Text
+CPU shortage
+Memory shortage
+Node selector
+Affinity rules
+Taints/Tolerations
+GPU requirement
+6. HPA + Karpenter Flow
+Very Popular Question
+Model Answer
+Plain Text
+Traffic Increases
+↓
+HPA Scales Pods
+↓
+More Pods Created
+↓
+Pods Pending
+↓
+Karpenter Launches Nodes
+↓
+Pods Scheduled
+
+HPA scales:
+
+Plain Text
+Pods
+
+Karpenter scales:
+
+Plain Text
+Nodes
+7. Karpenter vs HPA
+Answer
+
+HPA
+
+Plain Text
+Adds Pods
+
+Karpenter
+
+Plain Text
+Adds Nodes
+
+HPA:
+
+Plain Text
+Application level
+
+Karpenter:
+
+Plain Text
+Infrastructure level
+8. Scenario
+Interviewer
+
+HPA scaled to 50 pods.
+
+20 remain pending.
+
+What happens next?
+
+Model Answer
+
+"I would check scheduler events first.
+
+If pending pods require additional cluster capacity, Karpenter detects those unschedulable pods and provisions appropriate EC2 instances.
+
+After node registration:
+
+Plain Text
+Node joins cluster
+Pods get scheduled
+Traffic served
+
+"
+
+9. Node Consolidation
+Popular Senior Question
+Interviewer
+
+What is Consolidation?
+
+Model Answer
+
+Consolidation means:
+
+Plain Text
+Remove underutilized nodes
+
+Example:
+
+Plain Text
+Node1 = 10%
+Node2 = 15%
+Node3 = 20%
+
+Workloads can fit on:
+
+Plain Text
+Node1 + Node2
+
+Karpenter:
+
+Plain Text
+Drains Node3
+Deletes Node3
+
+Cost savings.
+
+10. Spot Instances
+Interviewer
+
+How does Karpenter help reduce AWS costs?
+
+Model Answer
+
+Karpenter can provision:
+
+Plain Text
+On-Demand
+Spot
+Mixed Capacity
+
+Example:
+
+Plain Text
+70% Spot
+30% On-Demand
+
+This significantly reduces infrastructure costs.
+
+11. Spot Interruption Handling
+Question
+
+AWS is terminating a Spot node.
+
+What happens?
+
+Model Answer
+Plain Text
+Interruption Event
+↓
+Karpenter Detects Event
+↓
+Drain Node
+↓
+Reschedule Pods
+↓
+Launch Replacement Node
+
+Workload remains available.
+
+12. NodePool Question
+Interviewer
+
+What is a NodePool?
+
+Model Answer
+
+NodePool defines:
+
+Plain Text
+Capacity type
+Instance family
+Zones
+Limits
+Requirements
+
+Example:
+
+YAML
+requirements:
+- key: karpenter.k8s.aws/instance-category
+operator: In
+values:
+- c
+- m
+
+Allows:
+
+Plain Text
+Compute
+Memory Optimized
+
+instances.
+
+13. EC2NodeClass
+Interviewer
+
+What is EC2NodeClass?
+
+Model Answer
+
+Defines AWS-specific configuration:
+
+Plain Text
+AMI
+Subnets
+Security Groups
+IAM Roles
+Storage
+
+Think of:
+
+Plain Text
+NodePool
++
+AWS Configuration
+14. Karpenter Scheduling Logic
+Question
+
+How does Karpenter choose instance type?
+
+Model Answer
+
+It evaluates:
+
+Plain Text
+CPU
+Memory
+Architecture
+Storage
+Availability Zone
+Spot Availability
+Cost
+
+Then chooses matching instances.
+
+15. GPU Workloads
+Interviewer
+
+Can Karpenter provision GPU nodes?
+
+Model Answer
+
+Yes.
+
+Example:
+
+YAML
+limits:
+nvidia.com/gpu: 1
+
+Pending GPU pod triggers:
+
+Plain Text
+g5
+p3
+p4
+
+instances depending on configuration.
+
+16. Multi-AZ Question
+Interviewer
+
+How does Karpenter support high availability?
+
+Model Answer
+
+Nodes can be launched across:
+
+Plain Text
+us-east-1a
+us-east-1b
+us-east-1c
+
+Reducing dependence on a single AZ.
+
+17. Troubleshooting Scenario
+Interviewer
+
+Pods are pending even though Karpenter is installed.
+
+How do you troubleshoot?
+
+Model Answer
+
+Check:
+
+Shell
+kubectl get pods -n karpenter
+
+Verify:
+
+Shell
+kubectl logs deployment/karpenter -n karpenter
+
+Check:
+
+Shell
+kubectl get nodepools
+kubectl get ec2nodeclass
+
+Also inspect pod events:
+
+Shell
+kubectl describe pod
+
+Potential reasons:
+
+Plain Text
+IAM issues
+Subnet issues
+NodePool limits
+Incorrect requirements
+AWS quota limits
+18. Cost Optimization Question
+Interviewer
+
+Your EKS bill is very high. How can Karpenter help?
+
+Model Answer
+
+I would:
+
+Plain Text
+Enable Consolidation
+Use Spot Capacity
+Remove Excess NodeGroups
+Bin-pack workloads efficiently
+Scale down idle nodes
+
+Result:
+
+Plain Text
+Lower EC2 costs
+Higher utilization
+19. Architecture Question
+Interviewer
+
+Explain complete scaling flow in an EKS cluster using Karpenter.
+
+Model Answer
+Plain Text
+User Traffic
+↓
+Ingress
+↓
+Application Pods
+↓
+CPU Increases
+↓
+HPA
+↓
+Additional Pods
+↓
+Scheduler
+↓
+Pending Pods
+↓
+Karpenter
+↓
+Launch EC2 Instance
+↓
+Node Registers
+↓
+Pods Scheduled
+↓
+Service Endpoints Updated
+↓
+Traffic Reaches New Pods
+20. Senior-Level Design Question
+Interviewer
+
+When would you choose Karpenter over Cluster Autoscaler?
+
+Strong Answer
+
+"I prefer Karpenter in EKS environments where workloads are dynamic and require multiple instance types. It provides faster provisioning, better packing efficiency, support for Spot capacity, and removes the need to manage many Auto Scaling Groups.
+
+For legacy environments already heavily invested in managed node groups and Cluster Autoscaler, migration may not always be immediately necessary.
+
+For new EKS platforms, Karpenter is generally my preferred node autoscaling solution."
+
+Top 10 Karpenter Interview Questions (Most Asked)
+What problem does Karpenter solve?
+Karpenter vs Cluster Autoscaler?
+How does Karpenter detect pending pods?
+Explain NodePool.
+Explain EC2NodeClass.
+How does Karpenter choose instance types?
+What is node consolidation?
+How does Karpenter work with HPA?
+How are Spot instances handled?
+Pods are pending despite Karpenter. How do you troubleshoot?
+
+For a senior Kubernetes interview, be prepared to explain the complete flow:
+
+Plain Text
+HPA
+↓
+Pending Pods
+↓
+Karpenter
+↓
+EC2 Instance Launch
+↓
+Node Registration
+↓
+Cilium CNI (if used)
+↓
+Pod IP Allocation
+↓
+Service Endpoint Update
+↓
+Traffic Routing
