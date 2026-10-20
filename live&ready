@@ -1,0 +1,156 @@
+1. Readiness Probe (Can I receive traffic?)
+
+Purpose: Determines whether a pod is ready to serve requests.
+
+If the readiness probe fails:
+
+Pod is NOT restarted
+Pod is removed from the Service endpoints
+Kubernetes stops sending traffic to it
+Example Scenario
+
+Your application takes 30 seconds to load configuration and connect to a database.
+
+YAML
+readinessProbe:
+httpGet:
+path: /ready
+port: 8080
+initialDelaySeconds: 5
+periodSeconds: 10
+Flow
+Plain Text
+Pod Starts
+|
+v
+Application Initializing
+|
+Readiness = Fail
+|
+Service does NOT send traffic
+|
+Application Ready
+|
+Readiness = Pass
+|
+Traffic Starts
+Common Use Cases
+Waiting for database connection
+Cache warm-up
+Loading configuration
+Waiting for dependent services
+2. Liveness Probe (Am I alive?)
+
+Purpose: Determines whether the application is still functioning.
+
+If the liveness probe fails:
+
+Kubernetes assumes the application is hung/dead
+Pod is restarted automatically
+Example Scenario
+
+Java application entered a deadlock.
+
+YAML
+livenessProbe:
+httpGet:
+path: /health
+port: 8080
+initialDelaySeconds: 30
+periodSeconds: 10
+Flow
+Plain Text
+Pod Running
+|
+Application Hangs
+|
+Liveness = Fail
+|
+Kubernetes Restarts Pod
+Common Use Cases
+Deadlock detection
+Application stuck in infinite loop
+Memory corruption
+Hung process
+Both Together
+YAML
+apiVersion: v1
+kind: Pod
+metadata:
+name: demo
+spec:
+containers:
+- name: app
+image: myapp:latest
+ 
+readinessProbe:
+httpGet:
+path: /ready
+port: 8080
+initialDelaySeconds: 5
+periodSeconds: 5
+ 
+livenessProbe:
+httpGet:
+path: /health
+port: 8080
+initialDelaySeconds: 30
+periodSeconds: 10
+Timeline
+Plain Text
+Time 0 Pod Starts
+Time 5 Readiness checks start
+Time 20 App Ready
+Service sends traffic
+ 
+Time 30 Liveness checks start
+ 
+App hangs at Time 100
+Liveness fails
+Kubernetes restarts pod
+Startup Probe (Third Probe Often Asked in Interviews)
+
+For slow-starting applications:
+
+YAML
+startupProbe:
+httpGet:
+path: /health
+port: 8080
+failureThreshold: 30
+periodSeconds: 10
+
+While startup probe is running:
+
+Readiness is ignored
+Liveness is ignored
+
+Useful for:
+
+Java Spring Boot
+Large .NET applications
+Applications taking several minutes to start
+Interview Question
+
+Q: What happens if Readiness Probe fails?
+
+✅ Pod continues running
+ ✅ No restart happens
+ ✅ Pod removed from Service endpoints
+
+Q: What happens if Liveness Probe fails?
+
+✅ Pod restarted
+ ✅ New container instance starts
+
+Quick Memory Trick
+Plain Text
+Readiness = Ready to receive traffic?
+ 
+Liveness = Alive or dead?
+ 
+Startup = Finished starting?
+
+For a mid-to-senior Kubernetes interview, remember this key statement:
+
+Readiness controls traffic flow; Liveness controls container restart; Startup protects slow-starting applications from premature restarts.
