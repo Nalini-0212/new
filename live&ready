@@ -154,3 +154,7 @@ Startup = Finished starting?
 For a mid-to-senior Kubernetes interview, remember this key statement:
 
 Readiness controls traffic flow; Liveness controls container restart; Startup protects slow-starting applications from premature restarts.
+
+ResourceQuota limits aggregate resource usage for a namespace.
+LimitRange sets default/min/max resource constraints for individual pods or containers.
+Both are commonly used together in production clusters.
