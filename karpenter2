@@ -1,0 +1,382 @@
+A node affinity conflict occurs when a pod's node affinity rules cannot be satisfied by any existing node or provisionable node. The scheduler evaluates node labels against the pod's required affinity constraints, and if no match exists, the pod remains Pending with a "didn't match Pod's node affinity" error. In Karpenter environments, such conflicts can also occur when pod requirements exceed the constraints defined in NodePools or EC2NodeClasses, preventing node provisioning.
+
+Karpenter creating nodes does not guarantee scheduling. The pod scheduler still validates node readiness, taints/tolerations, node selectors, affinities, available resources, PVC topology, and NodePool constraints. My first step is always kubectl describe pod and review the scheduling events. Then I verify node readiness, taints, resource availability, and NodeClaim status. In most production incidents I've seen, the root causes are untolerated taints, node selector mismatches, startup taints not being removed, or insufficient allocatable resources on the newly provisioned nodes.
+
+demo i need to know for senior to mid level jobs?
+
+For a mid-to-senior Kubernetes/EKS interview, don't just explain Karpenter. You should be able to demonstrate it live.
+
+Demo 1: HPA + Karpenter End-to-End (Most Important)
+Architecture
+Plain Text
+nginx deployment
+↓
+Load increases
+↓
+HPA scales pods
+↓
+Pods remain Pending
+↓
+Karpenter provisions node
+↓
+Pods scheduled
+What interviewer expects
+
+Show:
+
+Shell
+kubectl get deploy
+kubectl get pods
+kubectl get hpa
+kubectl get nodes
+
+Generate load:
+
+Shell
+kubectl run load-generator \
+--image=busybox \
+--restart=Never \
+-it -- sh
+ 
+while true; do wget -q -O- http://nginx; done
+
+Observe:
+
+Shell
+kubectl get hpa -w
+kubectl get pods -w
+kubectl get nodes -w
+
+Explain:
+
+Plain Text
+HPA scales pods
+Karpenter scales nodes
+
+This is the #1 demo.
+
+Demo 2: Pending Pod Triggering New Node
+
+Create deployment:
+
+YAML
+resources:
+requests:
+cpu: "4"
+memory: "8Gi"
+
+Cluster:
+
+Plain Text
+No node has enough resources
+
+Result:
+
+Shell
+kubectl get pods
+
+Shows:
+
+Plain Text
+Pending
+
+Describe pod:
+
+Shell
+kubectl describe pod <pod>
+
+Explain:
+
+Plain Text
+Scheduler cannot place pod
+
+Then:
+
+Shell
+kubectl get nodeclaims -w
+
+Show:
+
+Plain Text
+NodeClaim Created
+
+Then:
+
+Shell
+kubectl get nodes -w
+
+New node joins cluster.
+
+Demo 3: Spot Instance Demo
+
+Create separate NodePool
+
+YAML
+requirements:
+- key: karpenter.sh/capacity-type
+operator: In
+values:
+- spot
+
+Deploy workload:
+
+YAML
+nodeSelector:
+workload: batch
+
+Explain:
+
+Plain Text
+Karpenter launches Spot node
+
+Interview talking points:
+
+Cost optimization
+Risk of interruption
+Suitable workloads
+Demo 4: Consolidation Demo
+
+Initial:
+
+Plain Text
+3 nodes
+
+Run workload:
+
+Shell
+kubectl scale deploy nginx --replicas=20
+
+After pods spread:
+
+Plain Text
+3 nodes utilized
+
+Scale down:
+
+Shell
+kubectl scale deploy nginx --replicas=1
+
+Show:
+
+Plain Text
+Nodes empty
+
+Karpenter:
+
+Plain Text
+Consolidates workloads
+Deletes unused nodes
+
+Check:
+
+Shell
+kubectl get nodes -w
+
+Senior interviewers love this demo.
+
+Demo 5: Drift Detection
+
+Update NodeClass.
+
+Example:
+
+Plain Text
+AMI old
+↓
+AMI new
+
+Check:
+
+Shell
+kubectl get nodeclaims
+ 
+
+Explain:
+
+Plain Text
+Current nodes drifted
+
+Karpenter:
+
+Plain Text
+Creates replacement nodes
+Drains old nodes
+Deletes old nodes
+
+Even if you cannot execute live, drawing this flow is usually enough.
+
+Demo 6: NodePool Constraints
+
+Create NodePool:
+
+YAML
+requirements:
+- key: kubernetes.io/arch
+operator: In
+values:
+- amd64
+
+Deploy ARM workload.
+
+Result:
+
+Plain Text
+Pending
+
+Show:
+
+Shell
+kubectl describe pod
+
+Explain why scheduling failed.
+
+This demonstrates scheduler knowledge.
+
+Demo 7: Spot + On-Demand Mixed Strategy
+
+NodePool 1:
+
+Plain Text
+Spot
+
+NodePool 2:
+
+Plain Text
+On-Demand
+
+Critical Application:
+
+YAML
+nodeSelector:
+capacity-type: on-demand
+
+Batch Application:
+
+YAML
+nodeSelector:
+capacity-type: spot
+
+Architecture:
+
+Plain Text
+Critical APIs → OnDemand
+ETL Jobs → Spot
+
+Senior-level design discussion.
+
+Demo 8: Troubleshooting Pending Pods
+
+Deploy:
+
+YAML
+resources:
+requests:
+memory: 500Gi
+
+No matching nodes.
+
+Troubleshoot:
+
+Shell
+kubectl describe pod
+kubectl logs deployment/karpenter -n karpenter
+kubectl get nodeclaims
+
+Explain:
+
+Plain Text
+Check scheduling event
+Check NodePool
+Check NodeClaim
+Check AWS provisioning
+
+This demonstrates production troubleshooting.
+
+Demo 9: Affinity and Taints
+
+Create:
+
+YAML
+taints:
+workload=prod:NoSchedule
+
+Deploy pod without toleration.
+
+Result:
+
+Plain Text
+Pending
+
+Add:
+
+YAML
+tolerations:
+- key: workload
+
+Redeploy.
+
+Result:
+
+Plain Text
+Pod scheduled
+
+Explain:
+
+Plain Text
+Karpenter honors Kubernetes scheduling rules.
+Demo 10: Complete Production Architecture Demo
+
+Draw this on whiteboard:
+
+Plain Text
+Users
+│
+▼
+Application
+│
+▼
+CPU High
+│
+▼
+HPA
+│
+More Pods Created
+│
+▼
+Pending Pods
+│
+▼
+Karpenter
+│
+Creates NodeClaim
+│
+▼
+Launch EC2
+│
+▼
+Node Joins EKS
+│
+▼
+Pods Scheduled
+│
+▼
+VPA
+Resource Tuning
+│
+▼
+Traffic Drops
+│
+▼
+HPA Down
+│
+▼
+Consolidation
+│
+▼
+Node Deleted
+If I were interviewing for a Senior Consultant or Senior Platform Engineer role, I would be prepared to perform these 5 demos live:
+HPA + Karpenter scaling demo
+Pending Pod → NodeClaim → New Node flow
+Spot vs On-Demand NodePools
+Consolidation (Scale-in)
+Troubleshooting Pending Pods using describe pod, NodeClaim and Karpenter logs
