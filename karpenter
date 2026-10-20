@@ -1,0 +1,925 @@
+1. Why Karpenter over Cluster Autoscaler?
+
+Answer:
+
+Cluster Autoscaler scales pre-defined node groups (ASGs). Karpenter directly provisions the most suitable node based on pending pod requirements.
+
+Benefits:
+
+Faster scaling
+No need to maintain multiple ASGs
+Better bin-packing
+Lower cloud costs
+Supports Spot and On-Demand intelligently
+
+Interview One-Liner:
+
+Cluster Autoscaler scales node groups; Karpenter scales infrastructure dynamically based on pod requirements.
+
+2. How does Karpenter provision nodes?
+
+Answer:
+
+Flow:
+
+Plain Text
+Pending Pod
+↓
+Scheduler cannot place Pod
+↓
+Karpenter observes unschedulable Pod
+↓
+Calculates CPU/Memory requirements
+↓
+Selects best EC2 instance
+↓
+Creates NodeClaim
+↓
+Launches EC2 Instance
+↓
+Node joins cluster
+↓
+Pod gets scheduled
+3. What is NodePool?
+
+Answer:
+
+A NodePool defines what type of nodes Karpenter may create.
+
+Example constraints:
+
+YAML
+instance family
+availability zones
+architecture
+capacity type
+
+Think of it as:
+
+Plain Text
+Cluster Autoscaler → ASG
+Karpenter → NodePool
+
+Interview One-Liner:
+
+NodePool defines scheduling and provisioning constraints for nodes.
+
+4. What is EC2NodeClass?
+
+Answer:
+
+EC2NodeClass contains AWS-specific infrastructure settings.
+
+Examples:
+
+YAML
+AMI
+IAM Role
+Security Groups
+Subnets
+
+NodePool says:
+
+Plain Text
+What node should look like
+
+EC2NodeClass says:
+
+Plain Text
+How to build it in AWS
+5. What is NodeClaim?
+
+Answer:
+
+NodeClaim is a Kubernetes resource representing a node that Karpenter intends to launch.
+
+Example:
+
+Plain Text
+Pending Pod
+↓
+NodeClaim Created
+↓
+EC2 launched
+↓
+Node registered
+
+Useful commands:
+
+Shell
+kubectl get nodeclaims
+kubectl describe nodeclaim <name>
+
+Interview One-Liner:
+
+NodeClaim is the lifecycle object connecting Karpenter's scheduling decision to real infrastructure.
+
+6. How does consolidation work?
+
+Answer:
+
+Consolidation removes underutilized nodes.
+
+Example:
+
+Plain Text
+Node1 = 15%
+Node2 = 20%
+Node3 = 10%
+
+Karpenter may move workloads:
+
+Plain Text
+Node1 = 45%
+
+and terminate Node2 and Node3.
+
+Benefits:
+
+Cost reduction
+Better utilization
+7. What is Drift Detection?
+
+Answer:
+
+Drift occurs when an existing node differs from the desired configuration.
+
+Example:
+
+Current nodes:
+
+Plain Text
+AMI-v1
+
+Desired:
+
+Plain Text
+AMI-v2
+
+Karpenter detects the drift and replaces outdated nodes.
+
+Other drift triggers:
+
+IAM role changes
+Security group changes
+AMI changes
+
+Interview One-Liner:
+
+Drift detection ensures running nodes match the desired NodePool and NodeClass configuration.
+
+8. How does Karpenter handle Spot interruptions?
+
+Answer:
+
+AWS gives a Spot interruption warning.
+
+Karpenter:
+
+Plain Text
+Detect interruption
+↓
+Cordons node
+↓
+Drains workloads
+↓
+Launches replacement capacity
+
+Best practice:
+
+Plain Text
+Critical Workloads → On-Demand
+Batch Jobs → Spot
+9. How does Karpenter select instance types?
+
+Answer:
+
+Karpenter looks at:
+
+Plain Text
+CPU Request
+Memory Request
+Node Affinity
+Taints/Tolerations
+Architecture
+Capacity Type
+Availability Zone
+
+Example:
+
+Pod needs
+
+Plain Text
+8 CPU
+16 GB RAM
+
+Karpenter evaluates:
+
+Plain Text
+m5.2xlarge
+c5.2xlarge
+m6i.2xlarge
+
+and chooses the most efficient eligible option.
+
+10. How does Karpenter interact with HPA?
+
+Answer:
+
+They solve different problems.
+
+HPA
+
+Scales:
+
+Plain Text
+Pods
+Karpenter
+
+Scales:
+
+Plain Text
+Nodes
+
+Flow:
+
+Plain Text
+CPU High
+↓
+HPA creates more Pods
+↓
+No Cluster Capacity
+↓
+Pods Pending
+↓
+Karpenter creates Nodes
+↓
+Pods Scheduled
+
+This is one of the most important interview flows.
+
+11. How do you troubleshoot Pending Pods?
+Step 1
+Shell
+kubectl describe pod <pod>
+
+Look for:
+
+Plain Text
+0/5 nodes available
+Insufficient cpu
+Insufficient memory
+Step 2
+Shell
+kubectl get nodepool
+kubectl get nodeclaims
+Step 3
+Shell
+kubectl logs -n karpenter deployment/karpenter
+
+Check:
+
+IAM issues
+Subnet discovery issues
+Security group issues
+Capacity shortages
+12. Which workloads should not run on Spot?
+
+Avoid:
+
+Databases
+Plain Text
+PostgreSQL
+MongoDB
+Oracle
+Stateful Applications
+Critical APIs
+Production Control Planes
+Real-time Trading Systems
+
+Reason:
+
+Plain Text
+Spot can be reclaimed by AWS at any time.
+ 
+
+Use:
+
+Plain Text
+Batch workloads
+CI/CD jobs
+ETL
+ML training
+13. What IAM permissions are required?
+
+Karpenter requires permissions such as:
+
+Plain Text
+ec2:RunInstances
+ec2:TerminateInstances
+ec2:DescribeInstances
+ec2:DescribeSubnets
+ec2:DescribeSecurityGroups
+iam:PassRole
+ssm:GetParameter
+
+Common interview question:
+
+Why iam:PassRole?
+
+Because Karpenter attaches the node IAM role to newly launched EC2 instances.
+
+14. How does Karpenter respect affinity and taints?
+
+Karpenter never bypasses Kubernetes scheduling constraints.
+
+It considers:
+
+Node Affinity
+YAML
+nodeAffinity
+Pod Affinity
+YAML
+podAffinity
+Pod Anti-Affinity
+YAML
+podAntiAffinity
+Taints
+YAML
+NoSchedule
+PreferNoSchedule
+NoExecute
+Tolerations
+YAML
+tolerations
+
+If constraints cannot be satisfied:
+
+Plain Text
+Node not provisioned
+Pod remains Pending
+15. Explain a production cost optimization implemented using Karpenter
+
+Strong Senior-Level Answer
+
+In one environment, we migrated from Cluster Autoscaler to Karpenter on EKS. We enabled NodePools that allowed multiple EC2 instance families instead of restricting workloads to fixed node groups. For non-critical workloads such as CI/CD runners, ETL jobs, and batch processing, we used Spot capacity. We also enabled consolidation to remove underutilized nodes automatically. As load fluctuated during the day, Karpenter right-sized compute capacity and removed idle nodes, improving utilization and reducing AWS compute costs while maintaining application availability.
+
+Most Important Whiteboard Diagram
+Plain Text
+User Traffic
+↓
+CPU Increases
+↓
+HPA
+↓
+More Pods
+↓
+Pods Pending
+↓
+Karpenter
+↓
+NodePool Match
+↓
+NodeClaim Created
+↓
+EC2 Launch
+↓
+Node Joins Cluster
+↓
+Pods Scheduled
+ 
+Traffic Drops
+↓
+Consolidation
+↓
+Node Terminated
+↓
+Cost Saved
+
+For a senior interview, be ready to go one level deeper into:
+
+Karpenter vs Cluster Autoscaler architecture
+NodePool, EC2NodeClass, and NodeClaim relationships
+Spot interruption handling
+Consolidation and drift
+Troubleshooting when pods stay Pending even though Karpenter is installed
+Karpenter + HPA + VPA working together in production.
+Provide your feedback on BizChat
+Karpenter vs Cluster Autoscaler architecture
+NodePool, EC2NodeClass, and NodeClaim relationships
+Spot interruption handling
+Consolidation and drift
+Troubleshooting when pods stay Pending even though Karpenter is installed
+Karpenter + HPA + VPA working together in production.
+
+
+
+These are the deep-dive topics where senior interviewers usually spend 20-30 minutes.
+
+1. Karpenter vs Cluster Autoscaler Architecture
+Cluster Autoscaler
+Plain Text
+Pending Pod
+↓
+Scheduler can't place pod
+↓
+Cluster Autoscaler checks ASG
+↓
+Increase ASG size
+↓
+EC2 launches
+↓
+Node joins cluster
+
+Limitations:
+
+Depends on Auto Scaling Groups
+Must pre-create ASGs
+Scaling can be slower
+Fixed instance types per ASG
+Manage many node groups
+Karpenter
+Plain Text
+Pending Pod
+↓
+Karpenter sees Unschedulable Pod
+↓
+Calculates exact requirements
+↓
+Chooses best instance
+↓
+Creates NodeClaim
+↓
+Launches EC2 directly
+↓
+Node joins cluster
+
+Advantages:
+
+No ASGs required
+Direct AWS API calls
+Better right-sizing
+Faster provisioning
+Better Spot usage
+Reduced management overhead
+Senior Interview Answer
+
+Cluster Autoscaler scales predefined node groups, whereas Karpenter provisions infrastructure directly based on real-time pod scheduling requirements.
+
+2. NodePool, EC2NodeClass, NodeClaim Relationship
+
+Think of it like:
+
+Plain Text
+NodePool
+↓
+EC2NodeClass
+↓
+NodeClaim
+↓
+EC2 Instance
+NodePool
+
+Defines:
+
+Plain Text
+Scheduling rules
+
+Example:
+
+YAML
+requirements:
+- instance-family
+- capacity type
+- zone
+
+Questions answered:
+
+Plain Text
+What kind of node?
+EC2NodeClass
+
+Defines:
+
+Plain Text
+AWS infrastructure details
+
+Example:
+
+YAML
+AMI
+Subnets
+Security Groups
+IAM Role
+
+Questions answered:
+
+Plain Text
+How should AWS build it?
+NodeClaim
+
+Created dynamically.
+
+Represents:
+
+Plain Text
+Actual provisioning request
+
+Example:
+
+Plain Text
+Need 4 CPUs + 8 GB
+↓
+NodeClaim Created
+↓
+EC2 launched
+Interview Question
+
+Explain with analogy:
+
+Plain Text
+NodePool = Requirements
+EC2NodeClass = Blueprint
+NodeClaim = Purchase Order
+EC2 Instance = Final Product
+3. Spot Interruption Handling
+
+One of the most common senior-level questions.
+
+What is Spot?
+
+Unused AWS capacity:
+
+Plain Text
+Cheap
+Not guaranteed
+
+AWS can reclaim it.
+
+What happens?
+
+AWS sends interruption notice.
+
+Plain Text
+Spot Node
+↓
+AWS interruption event
+↓
+Karpenter receives notification
+↓
+Cordon node
+↓
+Drain node
+↓
+Launch replacement
+↓
+Workloads move
+Real Interview Question
+
+What happens if Spot node disappears suddenly?
+
+Answer:
+
+Pods are evicted
+ReplicaSets recreate pods
+Karpenter launches replacement capacity
+Stateful apps may experience disruption
+Best Practice
+
+Use:
+
+Plain Text
+Mission Critical → On-Demand
+ 
+Batch Jobs
+CI/CD
+Analytics
+ETL
+ML Training
+→ Spot
+4. Consolidation and Drift
+
+Interviewers love these because they demonstrate cost optimization.
+
+Consolidation
+
+Suppose:
+
+Plain Text
+Node1 = 15%
+Node2 = 20%
+Node3 = 25%
+
+Total:
+
+Plain Text
+60%
+
+Can fit on one node.
+
+Karpenter:
+
+Plain Text
+Moves workloads
+↓
+Deletes Node2
+↓
+Deletes Node3
+
+Result:
+
+Plain Text
+Node1 = 60%
+ 
+Why Important?
+
+AWS bills for:
+
+Plain Text
+Running EC2
+Not Running Pods
+
+Consolidation saves money.
+
+Drift Detection
+
+Suppose NodePool changes:
+
+Old:
+
+Plain Text
+AL2 AMI v1
+
+New:
+
+Plain Text
+AL2 AMI v2
+
+Existing nodes are now:
+
+Plain Text
+Drifted
+
+Karpenter:
+
+Plain Text
+Launch new nodes
+Drain old nodes
+Delete old nodes
+Common Drift Reasons
+Plain Text
+AMI changed
+Security group changed
+Subnet changed
+IAM role changed
+NodePool changed
+ 
+5. Pending Pods Even Though Karpenter Is Installed
+
+This is an extremely common troubleshooting scenario.
+
+Step 1
+
+Check pod:
+
+Shell
+kubectl describe pod <pod>
+
+Look for:
+
+Plain Text
+Insufficient CPU
+Insufficient Memory
+Node affinity conflict
+Taint conflict
+Step 2
+
+Check Karpenter logs
+
+Shell
+kubectl logs -n karpenter deploy/karpenter
+
+Common errors:
+
+Plain Text
+AccessDenied
+Subnet not found
+Security group not found
+No instance type matched
+Step 3
+
+Check NodeClaims
+
+Shell
+kubectl get nodeclaims
+
+If missing:
+
+Plain Text
+Scheduling logic problem
+
+If present but not Ready:
+
+Plain Text
+AWS provisioning issue
+ 
+Step 4
+
+Check AWS tags
+
+Karpenter discovers:
+
+Plain Text
+Subnets
+Security Groups
+
+using tags.
+
+Wrong tags:
+
+Plain Text
+No nodes created
+Step 5
+
+Check IAM
+
+Very common.
+
+Missing:
+
+Plain Text
+ec2:RunInstances
+iam:PassRole
+ 
+
+results in:
+
+Plain Text
+NodeClaim created
+EC2 launch fails
+Interview Answer
+
+I would start with kubectl describe pod, review Karpenter controller logs, verify NodeClaims, check NodePool constraints, and then validate AWS subnet, security-group tags, and IAM permissions.
+
+6. Karpenter + HPA + VPA Together
+
+Senior architects frequently ask this.
+
+Each solves a different issue
+HPA
+
+Scales:
+
+Plain Text
+Pods
+ 
+VPA
+
+Scales:
+
+Plain Text
+CPU/Memory Requests
+Karpenter
+
+Scales:
+
+Plain Text
+Nodes
+Complete Flow
+Stage 1
+
+Traffic increases:
+
+Plain Text
+100 requests/sec
+
+becomes:
+
+Plain Text
+1000 requests/sec
+Stage 2
+
+CPU rises:
+
+Plain Text
+85%
+Stage 3
+
+HPA reacts
+
+Plain Text
+4 pods
+↓
+12 pods
+Stage 4
+
+No node capacity
+
+Plain Text
+8 pods running
+ 
+4 pending
+Stage 5
+
+Karpenter reacts
+
+Plain Text
+4 pending pods
+↓
+Need 8 CPU + 16 GB
+↓
+Launch m6i.2xlarge
+Stage 6
+
+Pods scheduled
+
+Plain Text
+12 pods running
+Stage 7
+
+VPA Observation
+
+VPA sees:
+
+Plain Text
+Request = 500m
+Usage = 50m
+
+or
+
+Plain Text
+Request = 500m
+Usage = 950m
+
+VPA recommends:
+
+Plain Text
+100m
+
+or
+
+Plain Text
+1 CPU
+
+for better sizing.
+
+Stage 8
+
+Traffic drops
+
+Plain Text
+1000 RPS
+↓
+100 RPS
+Stage 9
+
+HPA scales down pods
+
+Plain Text
+12 pods
+↓
+3 pods
+Stage 10
+
+Karpenter consolidates
+
+Plain Text
+3 nodes
+↓
+1 node
+Ultimate Senior Interview Flow
+
+Draw this:
+
+Plain Text
+Traffic Increase
+↓
+HPA
+↓
+More Pods Created
+↓
+Pods Become Pending
+↓
+Karpenter
+↓
+NodeClaim
+↓
+EC2 Provisioned
+↓
+Pod Scheduled
+↓
+VPA
+(Resource Right Sizing)
+↓
+Traffic Drops
+↓
+HPA Scale Down
+↓
+Karpenter Consolidation
+↓
+Node Termination
+↓
+Cost Savings
+Senior-Level One-Liner
+
+HPA scales workloads horizontally, VPA optimizes resource requests vertically, and Karpenter ensures the cluster has the right compute capacity by dynamically provisioning and deprovisioning nodes based on actual scheduling demand.
