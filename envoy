@@ -1,0 +1,27 @@
+Interview Answer
+
+Envoy Proxy is the data-plane proxy that handles and routes network traffic. Envoy Gateway is a Kubernetes Gateway API controller that watches resources such as GatewayClass, Gateway, and HTTPRoute, converts them into Envoy configurations, and programs Envoy Proxy automatically. In simple terms, Envoy Proxy does the traffic processing, while Envoy Gateway manages and configures Envoy Proxy.
+
+Installing Gateway API CRDs only registers resources such as Gateway, GatewayClass, and HTTPRoute with the Kubernetes API server. A Gateway controller such as Envoy Gateway, Cilium Gateway Controller, Kong, or NGINX Gateway Fabric is still required to watch those resources and configure the underlying proxy or data plane. Without a controller, the resources exist in Kubernetes but no actual traffic routing occurs.
+Envoy Gateway is a Kubernetes controller that watches Gateway API resources such as GatewayClass, Gateway, and HTTPRoute. When these resources are created, Envoy Gateway translates them into Envoy Proxy configurations and automatically programs the Envoy data plane to route traffic according to the defined rules. This allows us to manage traffic using Kubernetes-native resources instead of manually configuring Envoy.
+
+
+Simple Interview Summary
+Command	What it proveskubectl get peerauthentication -A	mTLS policy is enabled
+istioctl proxy-status	Sidecar is connected to Istiod
+`istioctl proxy-config cluster POD	grep ISTIO_MUTUAL`
+istioctl proxy-config secret POD	Certificates are present in Envoy
+
+istioctl proxy-config cluster POD	grep ISTIO_MUTUAL
+✅ Traffic policy says "use Istio-managed certificates for this connection"
+ ✅ Envoy will present a certificate
+ ✅ Envoy will validate the peer's certificate
+
+istioctl proxy-config secret POD
+
+✅ Certificates have been delivered to Envoy
+ ✅ Workload identity exists
+ ✅ Root CA is installed
+ ✅ Envoy can perform mTLS handshakes
+
+ Envoy is the proxy software itself. An Envoy sidecar is an Envoy proxy running as a companion container inside an application pod to handle service-to-service traffic, security, observability, and traffic management. Envoy can also run independently as a gateway or ingress proxy outside the sidecar model.
