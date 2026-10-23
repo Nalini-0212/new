@@ -1,0 +1,504 @@
+1. Difference Between ALLOW_ANY and REGISTRY_ONLY
+
+These are Istio outbound traffic modes configured via Sidecar.
+
+ALLOW_ANY (Default)
+YAML
+outboundTrafficPolicy:
+mode: ALLOW_ANY
+
+Behavior:
+
+Plain Text
+Pod → google.com ✅
+Pod → github.com ✅
+Pod → anysite.com ✅
+
+Istio forwards traffic even if it has never heard of the destination.
+
+Flow:
+
+Plain Text
+Pod
+|
+Envoy
+|
+Internet
+REGISTRY_ONLY
+YAML
+outboundTrafficPolicy:
+mode: REGISTRY_ONLY
+
+Behavior:
+
+Plain Text
+Pod → google.com ❌
+Pod → github.com ❌
+Pod → unknown.com ❌
+
+Only destinations registered in Istio are allowed.
+
+Registered means:
+
+Kubernetes Service
+ServiceEntry
+
+Flow:
+
+Plain Text
+Pod
+|
+Envoy
+|
+Known Service ?
+|
++-- YES --> Send
+|
++-- NO --> Block
+Interview Answer
+
+ALLOW_ANY permits outbound traffic to any external destination. REGISTRY_ONLY blocks traffic to unknown destinations and allows only services registered in the mesh through Kubernetes Services or ServiceEntries.
+
+2. Why Does Istio Need ServiceEntry for External Services?
+
+Istio maintains a service registry.
+
+Normally it knows:
+
+Plain Text
+app1.demo.svc.cluster.local
+app2.demo.svc.cluster.local
+ 
+
+But it doesn't know:
+
+Plain Text
+google.com
+api.github.com
+amazon.com
+
+When REGISTRY_ONLY is enabled:
+
+Plain Text
+Unknown destination = blocked
+
+ServiceEntry teaches Istio about external services.
+
+Example:
+
+YAML
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+name: google
+spec:
+hosts:
+- google.com
+
+Without ServiceEntry:
+
+Plain Text
+curl google.com
+↓
+Blocked
+
+With ServiceEntry:
+
+Plain Text
+curl google.com
+↓
+Allowed
+Interview Answer
+
+ServiceEntry extends Istio's service registry to include external services. Without it, Istio cannot apply routing, security, or observability policies to external destinations.
+
+3. NetworkPolicy vs ServiceEntry
+
+A very common interview question.
+
+NetworkPolicy
+
+Controls:
+
+Plain Text
+Who can talk to whom?
+
+Example:
+
+Plain Text
+app1 → app2 ✅
+app1 → app3 ❌
+
+Works at:
+
+Plain Text
+Layer 3 / Layer 4
+IP + Port
+
+Example:
+
+YAML
+kind: NetworkPolicy
+ServiceEntry
+
+Controls:
+
+Plain Text
+What external services exist?
+
+Works at:
+
+Plain Text
+Service Mesh Layer
+Layer 7
+
+Example:
+
+YAML
+kind: ServiceEntry
+
+Defines:
+
+Plain Text
+google.com
+github.com
+stripe.com
+Comparison
+NetworkPolicy	ServiceEntryKubernetes feature	Istio feature
+L3/L4	L7
+Controls traffic	Registers external services
+IP/Port based	Hostname based
+Doesn't define services	Defines external services
+Interview Answer
+
+NetworkPolicy controls connectivity between workloads using IPs and ports, whereas ServiceEntry registers external services with Istio so that traffic can be managed and observed.
+
+4. Cilium NetworkPolicy vs Istio AuthorizationPolicy
+
+Many engineers confuse these.
+
+Cilium NetworkPolicy
+
+Works at:
+
+Plain Text
+Network Layer
+
+Controls:
+
+Plain Text
+Can packets flow?
+
+Example:
+
+Plain Text
+app1 → app2:80 ✅
+app1 → app2:443 ❌
+
+Resource:
+
+YAML
+kind: CiliumNetworkPolicy
+Istio AuthorizationPolicy
+
+Works at:
+
+Plain Text
+Application Layer
+
+Controls:
+
+Plain Text
+Who can call what API?
+
+Example:
+
+Plain Text
+GET /orders ✅
+DELETE /orders ❌
+
+Resource:
+
+YAML
+kind: AuthorizationPolicy
+Example
+
+Cilium:
+
+Plain Text
+Allow TCP/80
+
+Istio:
+
+Plain Text
+Allow GET
+Deny DELETE
+Interview Answer
+
+Cilium NetworkPolicy controls packet-level communication using eBPF, while Istio AuthorizationPolicy controls request-level access such as users, JWTs, HTTP methods, and paths.
+
+5. How Does mTLS STRICT Work?
+
+Normal TLS:
+
+Plain Text
+Client verifies Server
+
+mTLS:
+
+Plain Text
+Client verifies Server
+Server verifies Client
+ 
+
+Both workloads prove identity.
+
+Istio mTLS Flow
+Plain Text
+App1
+|
+Envoy Sidecar
+|
+Certificate Exchange
+|
+Envoy Sidecar
+|
+App2
+
+Certificates come from:
+
+Plain Text
+Istiod
+STRICT Mode
+YAML
+mtls:
+mode: STRICT
+
+Behavior:
+
+Plain Text
+mTLS Traffic ✅
+ 
+Plain Traffic ❌
+Interview Answer
+
+In STRICT mode, workloads must use mutual TLS. Any plaintext connection attempt is rejected because the sidecars require certificate-based authentication.
+
+6. What Happens if a Workload Has No Sidecar?
+
+Suppose:
+
+Plain Text
+app1 → has sidecar
+app2 → no sidecar
+
+STRICT mTLS enabled.
+
+Flow:
+
+Plain Text
+app1
+|
+mTLS
+|
+app2
+
+app2 cannot speak mTLS.
+
+Result:
+
+Plain Text
+Connection Failure
+
+Most commonly:
+
+Plain Text
+503
+upstream connect error
+Interview Answer
+
+A workload without a sidecar cannot participate in mesh features such as mTLS, traffic management, or telemetry. Under STRICT mTLS, communication typically fails.
+
+7. How Does Hubble Collect Traffic Information?
+
+Hubble is built on top of Cilium.
+
+Traditional monitoring:
+
+Plain Text
+iptables
+tcpdump
+
+Cilium uses:
+
+Plain Text
+eBPF
+
+inside the Linux kernel.
+
+Flow:
+
+Plain Text
+Pod Traffic
+|
+eBPF Programs
+|
+Cilium Agent
+|
+Hubble
+
+Hubble receives:
+
+Plain Text
+Source Pod
+Destination Pod
+Protocol
+Verdict
+Latency
+DNS
+
+Example:
+
+Plain Text
+demo/app1
+→
+demo/app2
+FORWARDED
+
+or
+
+Plain Text
+DROPPED
+Interview Answer
+
+Hubble collects traffic visibility data from Cilium's eBPF programs running in the kernel, giving deep insight into network flows without packet mirroring.
+
+8. Why Use Cilium + Istio Together?
+
+They solve different problems.
+
+Cilium Provides
+Plain Text
+CNI
+Networking
+eBPF
+Network Policies
+Hubble
+Istio Provides
+Plain Text
+mTLS
+Traffic Routing
+Retries
+Circuit Breakers
+ServiceEntry
+Authorization
+Combined Architecture
+Plain Text
+Istio
+|
+Service Mesh Features
+ 
+Cilium
+|
+Networking + eBPF
+Interview Answer
+
+Cilium handles networking and observability using eBPF, while Istio provides service mesh functionality such as mTLS, traffic management, and service-level security.
+
+9. North-South vs East-West Traffic
+North-South Traffic
+
+Traffic entering or leaving the cluster.
+
+Example:
+
+Plain Text
+Internet
+|
+Gateway / Ingress
+|
+Application
+
+Examples:
+
+Plain Text
+User -> App
+App -> Google
+East-West Traffic
+
+Traffic inside the cluster.
+
+Example:
+
+Plain Text
+app1 -> app2
+
+or
+
+Plain Text
+serviceA -> serviceB
+
+Flow:
+
+Plain Text
+Pod
+|
+Service
+|
+Pod
+Interview Answer
+
+North-south traffic flows between the cluster and external systems, while east-west traffic flows between workloads within the cluster.
+
+10. How Would You Allow Only google.com and Block Everything Else?
+
+Use:
+
+YAML
+outboundTrafficPolicy:
+mode: REGISTRY_ONLY
+
+This blocks all unknown destinations.
+
+Then create:
+
+YAML
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+name: google-access
+spec:
+hosts:
+- google.com
+ports:
+- number: 443
+name: https
+protocol: TLS
+resolution: DNS
+location: MESH_EXTERNAL
+
+Result:
+
+Plain Text
+google.com ✅
+github.com ❌
+amazon.com ❌
+stackoverflow.com ❌
+
+Flow:
+
+Plain Text
+Pod
+|
+Envoy
+|
+google.com ✅
+ 
+Pod
+|
+Envoy
+|
+other domains ❌
+Senior-Level Interview Answer
+
+Set outboundTrafficPolicy.mode=REGISTRY_ONLY so external traffic is denied by default. Then create a ServiceEntry only for google.com. Istio will permit traffic solely to that registered external service while blocking all other domains.
